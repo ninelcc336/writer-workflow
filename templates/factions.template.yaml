@@ -1,0 +1,9 @@
+- id: self
+  name: 主角阵营
+  leader: protagonist
+  members_summary: 初始仅主角
+  territory: 待补充
+  resources:
+    - 待补充
+  relationship_to_protagonist: self
+  latest_change_chapter: 0

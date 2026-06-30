@@ -1,21 +1,58 @@
 # init-book
 
-状态：命令契约占位，尚未脚本化
+状态：可执行流程说明，尚未脚本化
 
-用途：
+执行入口：
 
-- 根据用户提供的简要创意，初始化一本新书的最小骨架
+- 当仓库处于空白新书状态时运行
+- 详细规则见 `docs/init-book.md`
 
-输入：
+## 步骤清单
+
+1. 收集最小输入
+2. 整理初始化简报
+3. 创建 `book/canon/` 最小文件
+4. 创建 `book/state/` 最小文件
+5. 生成 `book/artifacts/reports/init-book-summary.md`
+6. 停止并等待人审
+
+## 最小输入
 
 - 题材
 - 平台
 - 核心卖点
-- 主角概念
+- 主角定位
 - 目标篇幅
 
-输出：
+## 必须创建的文件
 
-- `book/canon/` 下的最小基础文件
-- `book/state/` 下的最小结构化状态
-- 初始化摘要
+### Canon
+
+- `book/canon/premise.md`
+- `book/canon/setting.md`
+- `book/canon/style_rules.md`
+- `book/canon/characters/protagonist.md`
+- `book/canon/volumes/volume-01-outline.md`
+
+### State
+
+- `book/state/characters.yaml`
+- `book/state/factions.yaml`
+- `book/state/foreshadows.yaml`
+- `book/state/power_state.yaml`
+- `book/state/chapter_index.yaml`
+
+### Report
+
+- `book/artifacts/reports/init-book-summary.md`
+
+## 强约束
+
+- 不得直接开始写第 1 章
+- 不得把推断内容冒充成已确认事实
+- 不得跳过初始化摘要
+
+## 推荐模板来源
+
+- `templates/*.template.md`
+- `templates/*.template.yaml`

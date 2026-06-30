@@ -13,4 +13,4 @@ required_fields:
 field_notes:
   territory: 当前控制范围或据点摘要
   resources: 对后续剧情有影响的关键资源
-  relationship_to_protagonist: 推荐值 ally / enemy / neutral / subordinate / unknown
+  relationship_to_protagonist: 推荐值 self / ally / enemy / neutral / subordinate / unknown

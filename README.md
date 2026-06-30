@@ -17,6 +17,12 @@
 - `scripts/`：命令契约占位文件
 - `book/`：fork 后真正的书稿工作区
 
+其中 `templates/` 现在同时包含：
+
+- canon 模板
+- state YAML 模板
+- 初始化摘要模板
+
 ## 建议使用方式
 
 ### 1. fork 本仓库

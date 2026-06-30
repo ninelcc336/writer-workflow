@@ -1,0 +1,16 @@
+file: chapter_index.yaml
+purpose: 为章节推进、回顾和连续性检查提供导航
+top_level_type: list
+required_fields:
+  - chapter_no
+  - title
+  - volume
+  - status
+  - summary
+  - must_payoff_ids
+  - new_state_changes
+  - ending_hook
+field_notes:
+  status: 推荐值 planned / drafted / reviewed / final
+  must_payoff_ids: 本章必须处理的伏笔或承诺列表
+  new_state_changes: 本章对世界状态的核心变化摘要

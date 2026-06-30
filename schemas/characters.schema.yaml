@@ -1,0 +1,17 @@
+file: characters.yaml
+purpose: 记录会持续影响后续写作的角色事实
+top_level_type: list
+required_fields:
+  - id
+  - name
+  - faction
+  - status
+  - current_location
+  - relationship_to_protagonist
+  - capability_summary
+  - latest_chapter
+  - open_threads
+field_notes:
+  id: 稳定唯一标识，建议使用英文或拼音短名
+  status: 推荐值 alive / dead / missing / inactive
+  open_threads: 当前仍未收束的角色相关问题列表

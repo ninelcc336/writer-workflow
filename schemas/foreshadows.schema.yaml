@@ -1,0 +1,14 @@
+file: foreshadows.yaml
+purpose: 记录伏笔的出现、推进与回收状态
+top_level_type: list
+required_fields:
+  - id
+  - description
+  - introduced_in
+  - current_status
+  - related_characters
+  - expected_payoff_window
+  - last_progress_chapter
+field_notes:
+  current_status: 推荐值 open / advanced / resolved / dropped
+  expected_payoff_window: 可写章节范围、卷范围或阶段范围

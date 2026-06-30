@@ -1,0 +1,17 @@
+file: power_state.yaml
+purpose: 记录会持续影响写作判断的能力、装备、基地和稀有资源状态
+top_level_type: map
+required_sections:
+  - protagonist
+  - systems_or_rules
+  - key_items
+  - companions
+  - base_or_assets
+  - rare_resources
+section_notes:
+  protagonist: 主角当前基础战力与成长约束
+  systems_or_rules: 共享规则、升级规则、世界硬约束
+  key_items: 长期重要装备或道具
+  companions: 宠物、搭档、从属战力
+  base_or_assets: 基地、载具、组织资产
+  rare_resources: 后续剧情必须记住的稀有资源

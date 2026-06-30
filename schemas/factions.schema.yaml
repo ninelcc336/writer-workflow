@@ -1,0 +1,16 @@
+file: factions.yaml
+purpose: 记录势力、地盘、资源与主角关系
+top_level_type: list
+required_fields:
+  - id
+  - name
+  - leader
+  - members_summary
+  - territory
+  - resources
+  - relationship_to_protagonist
+  - latest_change_chapter
+field_notes:
+  territory: 当前控制范围或据点摘要
+  resources: 对后续剧情有影响的关键资源
+  relationship_to_protagonist: 推荐值 ally / enemy / neutral / subordinate / unknown

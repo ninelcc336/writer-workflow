@@ -68,6 +68,10 @@
 
 - `docs/sync-state.md`
 
+`render-artifacts` 的详细执行规则见：
+
+- `docs/render-artifacts.md`
+
 文件职责区分：
 
 - `chapter_brief` 是章节输入简报，通常由人提供或先行整理
@@ -76,6 +80,7 @@
 - `chapter_humanized_draft` 是 agent 对正文初稿做的主动修订版本
 - `draft_review` 是 agent 对正文初稿做的人审前质检报告
 - `state_diff` 是 agent 在正文通过人审后生成的事实回写报告
+- `artifacts_recaps` 是基于最新 state 生成的可读回顾产物
 
 ## 三、两个审核节点
 

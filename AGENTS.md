@@ -24,9 +24,10 @@
 6. `docs/humanize-chapter.md`
 7. `docs/review-draft.md`
 8. `docs/sync-state.md`
-9. `docs/review-checklist.md`
-10. `book/canon/`
-11. `book/state/`
+9. `docs/render-artifacts.md`
+10. `docs/review-checklist.md`
+11. `book/canon/`
+12. `book/state/`
 
 如果 `book/canon/` 或 `book/state/` 尚未建立完整基础文件，必须先进入初始化流程。
 

@@ -1,14 +1,33 @@
 # render-artifacts
 
-状态：命令契约占位，尚未脚本化
+状态：可执行流程说明，尚未脚本化
 
-用途：
+执行入口：
 
-- 从 canon 和 state 渲染出便于阅读和审核的衍生文件
+- 当当前章已完成 `sync-state` 后运行
+- 详细规则见 `docs/render-artifacts.md`
 
-典型产物：
+## 步骤清单
 
-- 剧情回顾
-- 状态总览
-- 审稿报告
-- 状态差异报告
+1. 读取最新 `book/state/*.yaml`
+2. 读取当前章 `state diff`
+3. 重建剧情回顾类 artifacts
+4. 重建状态总览类 artifacts
+5. 写入 `book/artifacts/recaps/`
+
+## 最小输入
+
+- `book/state/*.yaml`
+- 当前章 `state diff`
+- 当前章正式版本
+
+## 推荐输出
+
+- `book/artifacts/recaps/plot-recap.md`
+- `book/artifacts/recaps/state-recap.md`
+
+## 强约束
+
+- 不得反向修改 state
+- 不得反向修改正文
+- 不得把 artifacts 当成唯一事实源

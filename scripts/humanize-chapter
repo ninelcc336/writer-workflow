@@ -1,15 +1,34 @@
 # humanize-chapter
 
-状态：命令契约占位，尚未脚本化
+状态：可执行流程说明，尚未脚本化
 
-用途：
+执行入口：
 
-- 对正文草稿做去 AI 味、句式收紧和平台适配修订
+- 当当前章草稿已存在、但尚未进入正式人审前运行
+- 详细规则见 `docs/humanize-chapter.md`
 
-重点检查：
+## 步骤清单
 
-- 模板化副词
-- 模板化面部描写
-- 机械过渡词
-- 过长段落
-- 模板化章末钩子
+1. 读取 style rules、当前章 plan、当前章 draft、当前 state
+2. 优先做删除型修订
+3. 修正文风模板化表达
+4. 修正段落与节奏
+5. 确认计划边界未被改动
+6. 输出修订稿
+
+## 最小输入
+
+- `book/canon/style_rules.md`
+- 当前章 `plan.md`
+- 当前章草稿
+- `book/state/*.yaml`
+
+## 推荐输出
+
+- `book/drafts/chapter-XXX/draft-v2-humanized.md`
+
+## 强约束
+
+- 不得擅自改章节方向
+- 不得擅自更新 state
+- 不得直接把修订稿当成 `final.md`

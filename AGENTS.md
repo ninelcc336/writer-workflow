@@ -21,9 +21,11 @@
 3. `docs/init-book.md`
 4. `docs/plan-chapter.md`
 5. `docs/draft-chapter.md`
-6. `docs/review-checklist.md`
-7. `book/canon/`
-8. `book/state/`
+6. `docs/humanize-chapter.md`
+7. `docs/review-draft.md`
+8. `docs/review-checklist.md`
+9. `book/canon/`
+10. `book/state/`
 
 如果 `book/canon/` 或 `book/state/` 尚未建立完整基础文件，必须先进入初始化流程。
 
@@ -68,9 +70,10 @@
 2. 等待人类审核章节计划
 3. `draft-chapter`
 4. `humanize-chapter`
-5. 等待人类审核正文
-6. `sync-state`
-7. `render-artifacts`
+5. `review-draft`
+6. 等待人类审核正文
+7. `sync-state`
+8. `render-artifacts`
 
 ## 5. 两个人工审核节点
 
@@ -122,6 +125,7 @@
 - 检查连续性
 - 检查文风风险
 - 检查节拍完成度
+- 输出 `blocker / warning / note` 分级报告
 
 ### State Syncer
 

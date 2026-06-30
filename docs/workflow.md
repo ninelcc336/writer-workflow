@@ -43,9 +43,10 @@
 2. 人工审核章节计划
 3. `draft-chapter`
 4. `humanize-chapter`
-5. 人工审核正文
-6. `sync-state`
-7. `render-artifacts`
+5. `review-draft`
+6. 人工审核正文
+7. `sync-state`
+8. `render-artifacts`
 
 `plan-chapter` 的详细执行规则见：
 
@@ -55,11 +56,21 @@
 
 - `docs/draft-chapter.md`
 
+`humanize-chapter` 的详细执行规则见：
+
+- `docs/humanize-chapter.md`
+
+`review-draft` 的详细执行规则见：
+
+- `docs/review-draft.md`
+
 文件职责区分：
 
 - `chapter_brief` 是章节输入简报，通常由人提供或先行整理
 - `chapter_plan` 是 agent 基于 brief、canon、state 产出的施工图
 - `chapter_draft` 是 agent 按 plan 写出的正文初稿
+- `chapter_humanized_draft` 是 agent 对正文初稿做的主动修订版本
+- `draft_review` 是 agent 对正文初稿做的人审前质检报告
 
 ## 三、两个审核节点
 
@@ -94,6 +105,7 @@
 
 - 初稿只能视为工作文件
 - 初稿不得直接替代定稿
+- 建议先完成 `review-draft`，再交给人审
 
 ## 四、State 的使用原则
 

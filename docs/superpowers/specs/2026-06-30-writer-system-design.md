@@ -100,9 +100,10 @@ V1 不做的事：
 2. 人审章节计划
 3. `draft-chapter`
 4. `humanize-chapter`
-5. 人审正文
-6. `sync-state`
-7. `render-artifacts`
+5. `review-draft`
+6. 人审正文
+7. `sync-state`
+8. `render-artifacts`
 
 ### 4.3 硬边界
 

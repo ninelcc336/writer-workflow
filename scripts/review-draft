@@ -1,13 +1,35 @@
 # review-draft
 
-状态：命令契约占位，尚未脚本化
+状态：可执行流程说明，尚未脚本化
 
-用途：
+执行入口：
 
-- 对正文草稿执行连续性检查、文风风险检查和节拍完成度检查
+- 当当前章正文初稿已存在时运行
+- 详细规则见 `docs/review-draft.md`
 
-输出至少应包含：
+## 步骤清单
 
-- blocker
-- warning
-- note
+1. 读取 canon、state、当前章 plan、当前章 draft、当前章 brief
+2. 做计划完成度检查
+3. 做连续性检查
+4. 做文风与平台风险检查
+5. 做字数与节奏检查
+6. 输出结构化审稿报告
+
+## 最小输入
+
+- `book/canon/` 基础文件
+- `book/state/*.yaml`
+- 当前章 `plan.md`
+- 当前章 `draft-v1.md` 或最新草稿
+- 当前章 brief
+
+## 推荐输出
+
+- `book/artifacts/reports/chapter-XXX-draft-review.md`
+
+## 强约束
+
+- 不得直接更新 state
+- 不得直接把 draft 升格为 `final.md`
+- 必须给出 `blocker / warning / note`

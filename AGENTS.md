@@ -20,9 +20,10 @@
 2. `docs/workflow.md`
 3. `docs/init-book.md`
 4. `docs/plan-chapter.md`
-5. `docs/review-checklist.md`
-6. `book/canon/`
-7. `book/state/`
+5. `docs/draft-chapter.md`
+6. `docs/review-checklist.md`
+7. `book/canon/`
+8. `book/state/`
 
 如果 `book/canon/` 或 `book/state/` 尚未建立完整基础文件，必须先进入初始化流程。
 
@@ -114,6 +115,7 @@
 
 - 根据通过审核的计划写正文
 - 不得擅自扩展重大设定
+- 产出的是初稿，不是定稿
 
 ### Reviewer
 

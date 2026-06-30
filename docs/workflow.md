@@ -51,10 +51,15 @@
 
 - `docs/plan-chapter.md`
 
+`draft-chapter` 的详细执行规则见：
+
+- `docs/draft-chapter.md`
+
 文件职责区分：
 
 - `chapter_brief` 是章节输入简报，通常由人提供或先行整理
 - `chapter_plan` 是 agent 基于 brief、canon、state 产出的施工图
+- `chapter_draft` 是 agent 按 plan 写出的正文初稿
 
 ## 三、两个审核节点
 
@@ -84,6 +89,11 @@
 - 写入定稿
 - 更新结构化状态
 - 生成剧情汇总和状态汇总
+
+在此之前：
+
+- 初稿只能视为工作文件
+- 初稿不得直接替代定稿
 
 ## 四、State 的使用原则
 

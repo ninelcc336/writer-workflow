@@ -23,9 +23,10 @@
 5. `docs/draft-chapter.md`
 6. `docs/humanize-chapter.md`
 7. `docs/review-draft.md`
-8. `docs/review-checklist.md`
-9. `book/canon/`
-10. `book/state/`
+8. `docs/sync-state.md`
+9. `docs/review-checklist.md`
+10. `book/canon/`
+11. `book/state/`
 
 如果 `book/canon/` 或 `book/state/` 尚未建立完整基础文件，必须先进入初始化流程。
 
@@ -132,6 +133,7 @@
 - 只在正文审核通过后更新结构化状态
 - 输出 state diff
 - 渲染剧情汇总和状态汇总
+- 不得在 state 中写入正文里不存在的重大事实
 
 ## 8. 最低产出要求
 

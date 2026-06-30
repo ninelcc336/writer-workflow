@@ -64,6 +64,10 @@
 
 - `docs/review-draft.md`
 
+`sync-state` 的详细执行规则见：
+
+- `docs/sync-state.md`
+
 文件职责区分：
 
 - `chapter_brief` 是章节输入简报，通常由人提供或先行整理
@@ -71,6 +75,7 @@
 - `chapter_draft` 是 agent 按 plan 写出的正文初稿
 - `chapter_humanized_draft` 是 agent 对正文初稿做的主动修订版本
 - `draft_review` 是 agent 对正文初稿做的人审前质检报告
+- `state_diff` 是 agent 在正文通过人审后生成的事实回写报告
 
 ## 三、两个审核节点
 
@@ -106,6 +111,11 @@
 - 初稿只能视为工作文件
 - 初稿不得直接替代定稿
 - 建议先完成 `review-draft`，再交给人审
+
+建议约定：
+
+- 人审通过版本落为 `book/drafts/chapter-XXX/final.md`
+- 之后再执行 `sync-state`
 
 ## 四、State 的使用原则
 

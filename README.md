@@ -77,5 +77,6 @@
 5. `docs/draft-chapter.md`
 6. `docs/humanize-chapter.md`
 7. `docs/review-draft.md`
-8. `docs/review-checklist.md`
-9. `docs/superpowers/specs/2026-06-30-writer-system-design.md`
+8. `docs/sync-state.md`
+9. `docs/review-checklist.md`
+10. `docs/superpowers/specs/2026-06-30-writer-system-design.md`

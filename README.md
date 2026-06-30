@@ -45,12 +45,13 @@
 
 1. 章节计划
 2. 人审计划
-3. 正文初稿
-4. 去 AI 味修订
-5. 正文审查报告
-6. 人审正文
-7. 状态同步
-8. 汇总渲染
+3. 正文骨架 / 提示词
+4. 正文初稿（可选）
+5. 去 AI 味修订
+6. 正文审查报告
+7. 人审正文
+8. 状态同步
+9. 汇总渲染
 
 ## 当前版本定位
 
@@ -74,6 +75,7 @@
 - `init-book`
 - `init-state`
 - `plan-chapter`
+- `prompt-chapter`
 - `draft-chapter`
 - `humanize-chapter`
 - `review-draft`
@@ -94,6 +96,12 @@
 
 也就是说，它们现在更像“可靠的流程骨架”，不是“强内容生成器”。
 
+正文骨架命令示例：
+
+```powershell
+.\scripts\prompt-chapter.cmd --chapter 1
+```
+
 ## 从哪里开始看
 
 建议按这个顺序阅读：
@@ -102,10 +110,11 @@
 2. `docs/workflow.md`
 3. `docs/init-book.md`
 4. `docs/plan-chapter.md`
-5. `docs/draft-chapter.md`
-6. `docs/humanize-chapter.md`
-7. `docs/review-draft.md`
-8. `docs/sync-state.md`
-9. `docs/render-artifacts.md`
-10. `docs/review-checklist.md`
-11. `docs/superpowers/specs/2026-06-30-writer-system-design.md`
+5. `docs/prompt-chapter.md`
+6. `docs/draft-chapter.md`
+7. `docs/humanize-chapter.md`
+8. `docs/review-draft.md`
+9. `docs/sync-state.md`
+10. `docs/render-artifacts.md`
+11. `docs/review-checklist.md`
+12. `docs/superpowers/specs/2026-06-30-writer-system-design.md`

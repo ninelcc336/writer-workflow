@@ -1,0 +1,35 @@
+# prompt-chapter
+
+状态：可执行流程说明，已最小脚本化
+
+执行入口：
+
+- 当某章计划已通过审核后运行
+- 详细规则见 `docs/prompt-chapter.md`
+- Windows 包装命令：`scripts/prompt-chapter.cmd`
+- Python 入口：`python scripts/workflow_cli.py prompt-chapter ...`
+
+## 步骤清单
+
+1. 读取 canon、state、当前章 plan、当前章 brief、上一章上下文
+2. 抽取正文骨架所需信息
+3. 组装可独立使用的提示词文件
+4. 输出 `prompt.md`
+
+## 最小输入
+
+- `book/canon/` 基础文件
+- `book/state/*.yaml`
+- 当前章 `plan.md`
+- 当前章 brief
+
+## 推荐输出
+
+- `book/drafts/chapter-XXX/prompt.md`
+- `book/drafts/chapter-XXX/prompt.data.yaml`
+
+## 强约束
+
+- 不得直接写正文
+- 不得提前更新 state
+- 生成的骨架必须能独立提供给其他模型使用

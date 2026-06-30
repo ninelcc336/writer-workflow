@@ -55,6 +55,8 @@ def main() -> int:
         return run_init_state(Path(args.root).resolve(), force=args.force)
     if command == "plan-chapter":
         return run_plan_chapter(args)
+    if command == "prompt-chapter":
+        return run_prompt_chapter(args)
     if command == "draft-chapter":
         return run_draft_chapter(args)
     if command == "humanize-chapter":
@@ -106,6 +108,11 @@ def build_parser() -> argparse.ArgumentParser:
     plan_parser.add_argument("--ending-type", default="钩子推进", help="章末落点类型")
     plan_parser.add_argument("--must-payoff", action="append", default=[], help="必须处理的伏笔 ID，可重复传入")
     plan_parser.add_argument("--force", action="store_true", help="覆盖已有计划文件")
+
+    prompt_parser = subparsers.add_parser("prompt-chapter", help="生成正文骨架 / 提示词")
+    add_root_arg(prompt_parser)
+    add_chapter_arg(prompt_parser)
+    prompt_parser.add_argument("--force", action="store_true", help="覆盖已有 prompt 文件")
 
     draft_parser = subparsers.add_parser("draft-chapter", help="生成正文初稿")
     add_root_arg(draft_parser)
@@ -225,8 +232,9 @@ def run_plan_chapter(args: argparse.Namespace) -> int:
     brief_data = parse_brief_text(brief_text) if brief_text else {}
     chapter_title = args.title or brief_data.get("title") or f"第{args.chapter}章待定标题"
     chapter_goal = args.goal or brief_data.get("goal") or f"推进《{chapter_title}》的核心冲突"
-    volume = args.volume
-    target_words = args.target_words
+    volume = brief_data.get("volume") or args.volume
+    target_words = int(brief_data.get("target_words") or args.target_words)
+    ending_type = brief_data.get("ending_type") or args.ending_type
     must_payoff_ids = args.must_payoff or select_open_foreshadows(root)
     brief_must_nodes = brief_data.get("must_nodes", [])
     brief_risks = brief_data.get("risks", [])
@@ -239,7 +247,7 @@ def run_plan_chapter(args: argparse.Namespace) -> int:
         chapter_goal=chapter_goal,
         target_words=target_words,
         beat_suggestions=beat_suggestions,
-        ending_type=args.ending_type,
+        ending_type=ending_type,
     )
     plan_data = {
         "chapter": args.chapter,
@@ -247,13 +255,13 @@ def run_plan_chapter(args: argparse.Namespace) -> int:
         "volume": volume,
         "goal": chapter_goal,
         "target_words": target_words,
-        "ending_type": args.ending_type,
+        "ending_type": ending_type,
         "ending_hint": ending_hint,
         "must_payoff_ids": must_payoff_ids,
         "must_nodes": brief_must_nodes or [
             f"{protagonist_name}必须正式进入本章核心冲突",
             "本章关键矛盾必须完成至少一次实质推进",
-            f"结尾必须形成“{args.ending_type}”的明确落点",
+            f"结尾必须形成“{ending_type}”的明确落点",
         ],
         "state_constraints": build_state_constraints(root),
         "risks": brief_risks or [
@@ -281,36 +289,155 @@ def run_plan_chapter(args: argparse.Namespace) -> int:
     return 0 if written else 1
 
 
-def run_draft_chapter(args: argparse.Namespace) -> int:
+def run_prompt_chapter(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     chapter_dir = get_chapter_dir(root, args.chapter)
     plan_data = load_plan_data(chapter_dir)
     if not plan_data:
-        print("draft-chapter 无法执行：缺少 plan.data.yaml，请先执行 plan-chapter。", file=sys.stderr)
+        print("prompt-chapter 无法执行：缺少 plan.data.yaml，请先执行 plan-chapter。", file=sys.stderr)
         return 1
 
     protagonist_name = extract_protagonist_name(root) or "主角"
-    title = plan_data["title"]
-    goal = plan_data["goal"]
-    ending_hint = plan_data.get("ending_hint", "待补充")
-    beats = plan_data["beats"]
+    book_title = extract_book_title(root) or "待命名作品"
+    genre = extract_genre(root) or "待补充题材"
+    platform = extract_platform(root) or "待补充平台"
+    hook = extract_hook(root) or "待补充核心卖点"
+    style_rules = extract_style_rules_summary(root)
+    state_constraints = plan_data.get("state_constraints", {})
+    previous_context = load_previous_context(root, args.chapter)
+    chapter_mode = infer_chapter_mode(plan_data["goal"], plan_data["beats"], plan_data.get("ending_type", "待补充"))
+    key_characters = collect_key_characters(root, protagonist_name)
+    key_factions = collect_key_factions(root)
+    key_foreshadows = collect_key_foreshadows(root, plan_data.get("must_payoff_ids", []))
+    power_snapshot = collect_power_snapshot(root)
+    taboos = collect_taboos(root, plan_data.get("risks", []))
+
+    prompt_md = render_prompt_markdown(
+        book_title=book_title,
+        chapter=args.chapter,
+        title=plan_data["title"],
+        volume=plan_data["volume"],
+        genre=genre,
+        platform=platform,
+        hook=hook,
+        chapter_mode=chapter_mode,
+        protagonist_name=protagonist_name,
+        goal=plan_data["goal"],
+        target_words=int(plan_data.get("target_words", 3000)),
+        beats=plan_data["beats"],
+        must_nodes=plan_data.get("must_nodes", []),
+        style_rules=style_rules,
+        state_constraints=state_constraints,
+        ending_type=plan_data.get("ending_type", "待补充"),
+        ending_hint=plan_data.get("ending_hint", "待补充"),
+        previous_context=previous_context,
+        key_characters=key_characters,
+        key_factions=key_factions,
+        key_foreshadows=key_foreshadows,
+        power_snapshot=power_snapshot,
+        taboos=taboos,
+    )
+    prompt_data = {
+        "book_title": book_title,
+        "chapter": args.chapter,
+        "title": plan_data["title"],
+        "volume": plan_data["volume"],
+        "genre": genre,
+        "platform": platform,
+        "hook": hook,
+        "chapter_mode": chapter_mode,
+        "protagonist_name": protagonist_name,
+        "goal": plan_data["goal"],
+        "target_words": int(plan_data["target_words"]),
+        "source_plan": "plan.data.yaml",
+        "ending_type": plan_data.get("ending_type"),
+        "ending_hint": plan_data.get("ending_hint", "待补充"),
+        "previous_context": previous_context,
+        "beats": plan_data["beats"],
+        "must_nodes": plan_data.get("must_nodes", []),
+        "must_payoff_ids": plan_data.get("must_payoff_ids", []),
+        "style_rules": style_rules,
+        "state_constraints": state_constraints,
+        "key_characters": key_characters,
+        "key_factions": key_factions,
+        "key_foreshadows": key_foreshadows,
+        "power_snapshot": power_snapshot,
+        "taboos": taboos,
+        "risks": plan_data.get("risks", []),
+    }
+    written, skipped = write_files(
+        [
+            (chapter_dir / "prompt.md", prompt_md),
+            (chapter_dir / "prompt.data.yaml", dump_yaml(prompt_data)),
+        ],
+        force=args.force,
+    )
+    print_write_summary("prompt-chapter", root, written, skipped)
+    return 0 if written else 1
+
+
+def run_draft_chapter(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    chapter_dir = get_chapter_dir(root, args.chapter)
+    prompt_data = load_yaml(chapter_dir / "prompt.data.yaml")
+    prompt_path = chapter_dir / "prompt.md"
+    if not prompt_data or not prompt_path.exists():
+        print("draft-chapter 无法执行：缺少 prompt.md / prompt.data.yaml，请先执行 prompt-chapter。", file=sys.stderr)
+        return 1
+
+    protagonist_name = prompt_data.get("protagonist_name") or extract_protagonist_name(root) or "主角"
+    title = prompt_data["title"]
+    goal = prompt_data["goal"]
+    ending_type = prompt_data.get("ending_type", "待补充")
+    ending_hint = prompt_data.get("ending_hint", "待补充")
+    previous_context = prompt_data.get("previous_context", "上一章上下文待补充。")
+    beats = prompt_data.get("beats") or []
+    style_rules = prompt_data.get("style_rules") or []
+    key_foreshadows = prompt_data.get("key_foreshadows") or []
+    power_snapshot = prompt_data.get("power_snapshot") or []
+    must_nodes = prompt_data.get("must_nodes") or []
+    continuity_hints = build_draft_continuity_hints(prompt_data)
+
     draft_parts = [f"# 第{args.chapter}章：{title}", ""]
-    draft_parts.append(f"{protagonist_name}很清楚，这一章真正要解决的，是“{goal}”。")
+    if args.chapter > 1 and previous_context:
+        draft_parts.append(f"{previous_context}。余波还没散干净，{protagonist_name}已经被推到了新的局面前。")
+    else:
+        draft_parts.append(f"{protagonist_name}知道，今晚真正不能错过的，不是表面的输赢，而是“{goal}”。")
     draft_parts.append("")
+    if continuity_hints:
+        draft_parts.append(f"眼下最直接的掣肘有三个：{'; '.join(continuity_hints[:3])}。")
+        draft_parts.append("")
 
     for index, beat in enumerate(beats, start=1):
+        scene_seed = beat.get("scene_seed") or beat["key_action"]
+        conflict_focus = beat.get("conflict_focus") or beat["function"]
+        taboo = beat.get("taboo") or "不要把本节写成空转说明。"
+        node_hint = must_nodes[index - 1] if index - 1 < len(must_nodes) else ""
+        foreshadow_hint = key_foreshadows[min(index - 1, len(key_foreshadows) - 1)] if key_foreshadows else ""
+        power_hint = power_snapshot[min(index - 1, len(power_snapshot) - 1)] if power_snapshot else ""
+        style_hint = style_rules[min(index - 1, len(style_rules) - 1)] if style_rules else "保持短段、快推进。"
+
         draft_parts.append(
-            f"{protagonist_name}先把注意力放在“{beat['name']}”上。{beat['key_action']}。"
-            f"这一节的功能是{beat['function']}，所以场面必须朝着“{beat['landing']}”推进。"
+            f"{scene_seed}。{protagonist_name}在这一段里的直接目标，是{beat['key_action']}。"
         )
         draft_parts.append("")
         draft_parts.append(
-            f"第{index}个节拍里，局势不会只是表面热闹。{protagonist_name}需要在这一段里真正推动矛盾，"
-            f"并把读者带到下一个动作点。"
+            f"这一节必须承担“{beat['function']}”的作用，所以冲突焦点不能散，要明确压在{conflict_focus}上。"
+            f"{style_hint}"
+        )
+        draft_parts.append("")
+        supporting_bits = [item for item in [node_hint, foreshadow_hint, power_hint] if is_actionable_context(item)]
+        if supporting_bits:
+            draft_parts.append(
+                f"{protagonist_name}每推进一步，都要让这些信息真正落到场面里：{'；'.join(supporting_bits)}。"
+            )
+            draft_parts.append("")
+        draft_parts.append(
+            f"只有当局面被推到“{beat['landing']}”，这一节才算成立。{taboo}"
         )
         draft_parts.append("")
 
-    draft_parts.append(f"本章结尾应落在：{plan_data['ending_type']}。")
+    draft_parts.append(f"章末必须落在“{ending_type}”上。")
     draft_parts.append(f"具体收束方向：{ending_hint}。")
     draft_text = "\n".join(draft_parts).strip() + "\n"
 
@@ -319,10 +446,10 @@ def run_draft_chapter(args: argparse.Namespace) -> int:
     metadata = {
         "chapter": args.chapter,
         "title": title,
-        "source_plan": "plan.data.yaml",
+        "source_prompt": "prompt.md",
         "version": "draft-v1",
         "beat_count": len(beats),
-        "target_words": plan_data["target_words"],
+        "target_words": int(prompt_data.get("target_words", 0)),
     }
     written, skipped = write_files(
         [(draft_path, draft_text), (draft_data_path, dump_yaml(metadata))],
@@ -748,6 +875,10 @@ def load_brief_text(args: argparse.Namespace) -> str | None:
 
 
 def parse_brief_text(text: str) -> dict:
+    parsed_yaml = parse_brief_yaml(text)
+    if parsed_yaml is not None:
+        return parsed_yaml
+
     result: dict[str, object] = {
         "must_nodes": [],
         "beat_suggestions": [],
@@ -780,6 +911,85 @@ def parse_brief_text(text: str) -> dict:
     return result
 
 
+def parse_brief_yaml(text: str) -> dict[str, object] | None:
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return normalize_brief_mapping(data)
+
+
+def normalize_brief_mapping(data: dict) -> dict[str, object]:
+    result: dict[str, object] = {
+        "must_nodes": normalize_text_list(data.get("must_nodes") or data.get("必写节点")),
+        "beat_suggestions": normalize_text_list(data.get("beat_suggestions") or data.get("节拍建议")),
+        "risks": normalize_text_list(data.get("risks") or data.get("本章风险")),
+    }
+    scalar_aliases = {
+        "title": ["title", "章节标题"],
+        "goal": ["goal", "本章目标"],
+        "ending": ["ending", "章末落点"],
+        "volume": ["volume", "所属卷"],
+        "ending_type": ["ending_type", "结束类型", "章末类型"],
+        "target_words": ["target_words", "字数", "目标字数"],
+    }
+    for target_key, aliases in scalar_aliases.items():
+        for alias in aliases:
+            value = data.get(alias)
+            if value not in (None, ""):
+                if target_key == "target_words":
+                    parsed = coerce_positive_int(value)
+                    if parsed is not None:
+                        result[target_key] = parsed
+                else:
+                    result[target_key] = str(value).strip()
+                break
+    return result
+
+
+def normalize_text_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        items = [str(item).strip() for item in value]
+    else:
+        text = str(value).strip()
+        if not text:
+            return []
+        items = [part.strip("- ").strip() for part in re.split(r"[\r\n]+", text)]
+    return [item for item in items if item]
+
+
+def coerce_positive_int(value) -> int | None:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def is_meaningful_text(value) -> bool:
+    if value is None:
+        return False
+    text = str(value).strip()
+    return bool(text) and PLACEHOLDER not in text
+
+
+def is_actionable_context(value) -> bool:
+    if not is_meaningful_text(value):
+        return False
+    text = str(value).strip()
+    blocked_fragments = [
+        "当前没有必须推进的结构化伏笔",
+        "角色状态待补充",
+        "势力状态待补充",
+        "能力/资源状态待补充",
+    ]
+    return not any(fragment in text for fragment in blocked_fragments)
+
+
 def select_open_foreshadows(root: Path) -> list[str]:
     items = load_yaml(root / "book" / "state" / "foreshadows.yaml") or []
     selected = []
@@ -801,6 +1011,198 @@ def build_state_constraints(root: Path) -> dict[str, str]:
     }
 
 
+def extract_style_rules_summary(root: Path) -> list[str]:
+    path = root / "book" / "canon" / "style_rules.md"
+    if not path.exists():
+        return ["风格规则待补充"]
+    lines = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line.startswith("- "):
+            value = line[2:].strip()
+            if value and PLACEHOLDER not in value:
+                lines.append(value)
+    return lines[:6] or ["风格规则待补充"]
+
+
+def load_previous_context(root: Path, chapter: int) -> str:
+    if chapter <= 1:
+        return "这是第 1 章，无上一章上下文。"
+    previous_dir = get_chapter_dir(root, chapter - 1)
+    final_path = previous_dir / "final.md"
+    if final_path.exists():
+        return summarize_text(final_path.read_text(encoding="utf-8"), 120)
+    chapter_index = load_yaml(root / "book" / "state" / "chapter_index.yaml") or []
+    for item in chapter_index:
+        if item.get("chapter_no") == chapter - 1:
+            return item.get("summary", "待补充")
+    return "上一章上下文待补充。"
+
+
+def infer_chapter_mode(goal: str, beats: list[dict], ending_type: str) -> str:
+    text = " ".join([goal, ending_type] + [str(beat.get("name", "")) for beat in beats])
+    if any(keyword in text for keyword in ["战", "杀", "逃", "追", "围攻", "暴击", "出手"]):
+        return "强冲突推进章"
+    if any(keyword in text for keyword in ["揭秘", "真相", "发现", "情报", "规则", "线索"]):
+        return "信息揭示章"
+    if any(keyword in text for keyword in ["关系", "和解", "决裂", "告白", "背叛"]):
+        return "关系变化章"
+    return "常规推进章"
+
+
+def collect_key_characters(root: Path, protagonist_name: str, limit: int = 5) -> list[str]:
+    items = load_yaml(root / "book" / "state" / "characters.yaml") or []
+    if not isinstance(items, list):
+        return [f"{protagonist_name}：角色状态待补充"]
+
+    def sort_key(item: dict) -> tuple[int, int]:
+        is_protagonist = 0 if item.get("name") == protagonist_name or item.get("id") == "protagonist" else 1
+        latest_chapter = int(item.get("latest_chapter", 0) or 0)
+        return (is_protagonist, -latest_chapter)
+
+    summaries = []
+    for item in sorted(items, key=sort_key)[:limit]:
+        name = item.get("name") or item.get("id") or PLACEHOLDER
+        status = item.get("status", PLACEHOLDER)
+        location = item.get("current_location", PLACEHOLDER)
+        relation = item.get("relationship_to_protagonist", PLACEHOLDER)
+        capability = item.get("capability_summary", PLACEHOLDER)
+        open_threads = item.get("open_threads") or []
+        parts = []
+        if is_meaningful_text(status):
+            parts.append(f"状态={status}")
+        if is_meaningful_text(location):
+            parts.append(f"位置={location}")
+        if is_meaningful_text(relation):
+            parts.append(f"与主角关系={relation}")
+        if is_meaningful_text(capability):
+            parts.append(f"作用/能力={capability}")
+        if isinstance(open_threads, list):
+            meaningful_threads = [thread for thread in open_threads if is_meaningful_text(thread)]
+            if meaningful_threads:
+                parts.append(f"当前悬而未决={meaningful_threads[0]}")
+        summary = f"{name}：" + ("；".join(parts) if parts else "角色状态待补充")
+        summaries.append(summary)
+    return summaries or [f"{protagonist_name}：角色状态待补充"]
+
+
+def collect_key_factions(root: Path, limit: int = 4) -> list[str]:
+    items = load_yaml(root / "book" / "state" / "factions.yaml") or []
+    if not isinstance(items, list) or not items:
+        return ["势力状态待补充"]
+    summaries = []
+    for item in items[:limit]:
+        name = item.get("name") or item.get("id") or PLACEHOLDER
+        relation = item.get("relationship_to_protagonist", PLACEHOLDER)
+        territory = item.get("territory", PLACEHOLDER)
+        resources = [resource for resource in normalize_text_list(item.get("resources")) if is_meaningful_text(resource)][:2]
+        parts = []
+        if is_meaningful_text(relation):
+            parts.append(f"与主角关系={relation}")
+        if is_meaningful_text(territory):
+            parts.append(f"据点={territory}")
+        if resources:
+            parts.append(f"关键资源={', '.join(resources)}")
+        summaries.append(f"{name}：" + ("；".join(parts) if parts else "势力状态待补充"))
+    return summaries
+
+
+def collect_key_foreshadows(root: Path, must_payoff_ids: list[str], limit: int = 4) -> list[str]:
+    items = load_yaml(root / "book" / "state" / "foreshadows.yaml") or []
+    if not isinstance(items, list):
+        items = []
+
+    selected = []
+    must_ids = set(must_payoff_ids or [])
+    for item in items:
+        if item.get("id") in must_ids:
+            selected.append(item)
+    if len(selected) < limit:
+        for item in items:
+            if item in selected:
+                continue
+            if item.get("current_status") in {"open", "advanced"}:
+                selected.append(item)
+            if len(selected) >= limit:
+                break
+
+    summaries = []
+    for item in selected[:limit]:
+        identifier = item.get("id", PLACEHOLDER)
+        desc = item.get("description", PLACEHOLDER)
+        status = item.get("current_status", PLACEHOLDER)
+        payoff = item.get("expected_payoff_window", PLACEHOLDER)
+        summaries.append(f"{identifier}：{desc}；当前状态={status}；预期回收窗口={payoff}")
+    return summaries or ["当前没有必须推进的结构化伏笔，若正文新增伏笔，后续必须补回 state。"]
+
+
+def collect_power_snapshot(root: Path) -> list[str]:
+    data = load_yaml(root / "book" / "state" / "power_state.yaml") or {}
+    if not isinstance(data, dict):
+        return ["能力/资源状态待补充"]
+
+    protagonist = data.get("protagonist", {}) if isinstance(data.get("protagonist"), dict) else {}
+    lines = []
+    baseline = protagonist.get("baseline_power")
+    if is_meaningful_text(baseline):
+        lines.append(f"主角基础战力：{baseline}")
+    for item in [value for value in normalize_text_list(protagonist.get("current_constraints")) if is_meaningful_text(value)][:2]:
+        lines.append(f"主角当前限制：{item}")
+    for label in ["key_items", "companions", "base_or_assets", "rare_resources"]:
+        values = [value for value in normalize_text_list(data.get(label)) if is_meaningful_text(value)][:2]
+        for value in values:
+            lines.append(f"{label}：{value}")
+    return lines[:6] or ["能力/资源状态待补充"]
+
+
+def collect_taboos(root: Path, risks: list[str], limit: int = 8) -> list[str]:
+    keywords = ("禁", "不要", "不能", "红线", "高风险")
+    lines = list(risks or [])
+    for path in [
+        root / "book" / "canon" / "premise.md",
+        root / "book" / "canon" / "setting.md",
+        root / "book" / "canon" / "style_rules.md",
+        root / "book" / "canon" / "characters" / "protagonist.md",
+    ]:
+        if not path.exists():
+            continue
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line.startswith("- "):
+                continue
+            value = line[2:].strip()
+            if PLACEHOLDER in value:
+                continue
+            if any(keyword in value for keyword in keywords):
+                lines.append(value)
+    unique = []
+    for item in lines:
+        if item and item not in unique:
+            unique.append(item)
+    default_items = [
+        "不得改写已确认 canon / state 中的长期事实",
+        "不得为了制造爽点而跳过必要铺垫",
+        "不得把下一章主冲突提前透支完",
+    ]
+    for item in default_items:
+        if item not in unique:
+            unique.append(item)
+    return unique[:limit]
+
+
+def build_draft_continuity_hints(prompt_data: dict) -> list[str]:
+    hints = []
+    for item in prompt_data.get("key_characters", [])[:2]:
+        if is_actionable_context(item):
+            hints.append(item)
+    for item in prompt_data.get("state_constraints", {}).values():
+        if is_actionable_context(item):
+            hints.append(str(item))
+        if len(hints) >= 4:
+            break
+    return hints
+
+
 def build_beats(
     *,
     protagonist_name: str,
@@ -811,7 +1213,7 @@ def build_beats(
     ending_type: str,
 ) -> list[dict]:
     if beat_suggestions:
-        raw_beats = beat_suggestions[:4]
+        raw_beats = beat_suggestions[:5]
     else:
         raw_beats = [
             "开场推进",
@@ -822,25 +1224,38 @@ def build_beats(
     budgets = allocate_budgets(target_words, len(raw_beats))
     beats = []
     for index, name in enumerate(raw_beats):
+        label = compact_label(name, fallback=f"节拍{index + 1}")
         if index == 0:
-            function = "建立本章起点并快速挂上核心冲突"
-            action = f"{protagonist_name}必须在开场就卷入“{chapter_goal}”"
-            landing = "把读者带进本章主问题"
+            function = "建立本章起点并抛出必须立刻处理的麻烦"
+            action = name if beat_suggestions else f"{protagonist_name}必须在开场就卷入“{chapter_goal}”"
+            landing = "让主角无法退回原状态，读者明确知道本章主问题"
+            scene_seed = name if beat_suggestions else f"{protagonist_name}被迫面对本章的第一道门槛"
+            conflict_focus = f"{protagonist_name}必须在信息不完整时做出第一次选择"
+            taboo = "不要把开场写成纯设定说明或纯气氛铺垫。"
         elif index == len(raw_beats) - 1:
             function = "完成本章收束并形成下一步承接"
-            action = f"让{chapter_title}的主要矛盾完成当前阶段收束"
+            action = name if beat_suggestions else f"让{chapter_title}的主要矛盾完成当前阶段收束"
             landing = f"形成“{ending_type}”的明确结尾"
+            scene_seed = name if beat_suggestions else f"{protagonist_name}拿到阶段性结果，同时暴露更大的后果"
+            conflict_focus = "本章成果、代价和下一步威胁必须同时落地"
+            taboo = "不要把章末钩子解释透，不要提前写穿下一章。"
         else:
-            function = "推进核心矛盾并增加有效信息量"
-            action = f"{protagonist_name}需要围绕“{chapter_goal}”做出实质动作"
-            landing = "把局势推向下一节拍"
+            function = "推进核心矛盾，并让局势比上一节更难处理"
+            action = name if beat_suggestions else f"{protagonist_name}需要围绕“{chapter_goal}”做出实质动作"
+            landing = "把局势推向更贵、更险或更难回头的新阶段"
+            scene_seed = name if beat_suggestions else f"{protagonist_name}必须把动作真正落到场面里"
+            conflict_focus = f"{protagonist_name}需要付出代价，换来推进本章目标的资格"
+            taboo = "不要只让角色嘴上判断局势，要让推进和代价同时发生。"
         beats.append(
             {
-                "name": name,
+                "name": label,
                 "function": function,
                 "budget": budgets[index],
                 "key_action": action,
                 "landing": landing,
+                "scene_seed": scene_seed,
+                "conflict_focus": conflict_focus,
+                "taboo": taboo,
             }
         )
     return beats
@@ -853,12 +1268,20 @@ def allocate_budgets(target_words: int, beat_count: int) -> list[int]:
         ratios = [0.45, 0.55]
     elif beat_count == 3:
         ratios = [0.25, 0.45, 0.30]
+    elif beat_count == 5:
+        ratios = [0.16, 0.22, 0.24, 0.22, 0.16]
     else:
         ratios = [0.2, 0.3, 0.3, 0.2]
     budgets = [int(target_words * ratio) for ratio in ratios[:beat_count]]
     diff = target_words - sum(budgets)
     budgets[-1] += diff
     return budgets
+
+
+def compact_label(text: str, fallback: str) -> str:
+    cleaned = re.split(r"[，。；：,.!?？!]", text.strip())[0]
+    cleaned = cleaned[:16].strip()
+    return cleaned or fallback
 
 
 def render_plan_markdown(plan: dict) -> str:
@@ -914,6 +1337,130 @@ def render_plan_markdown(plan: dict) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def render_prompt_markdown(
+    *,
+    book_title: str,
+    chapter: int,
+    title: str,
+    volume: str,
+    genre: str,
+    platform: str,
+    hook: str,
+    chapter_mode: str,
+    protagonist_name: str,
+    goal: str,
+    target_words: int,
+    beats: list[dict],
+    must_nodes: list[str],
+    style_rules: list[str],
+    state_constraints: dict[str, str],
+    ending_type: str,
+    ending_hint: str,
+    previous_context: str,
+    key_characters: list[str],
+    key_factions: list[str],
+    key_foreshadows: list[str],
+    power_snapshot: list[str],
+    taboos: list[str],
+) -> str:
+    lines = [
+        "# 正文骨架",
+        "",
+        "## 一、写作任务",
+        "",
+        f"- 你现在要写《{book_title}》的第 {chapter} 章正文",
+        f"- 作品定位：{genre} / {platform}",
+        f"- 核心卖点：{hook}",
+        f"- 本章类型：{chapter_mode}",
+        f"- 主视角要求：核心视角围绕 {protagonist_name} 推进",
+        "- 直接输出正文，不输出分析、计划说明或解释性备注",
+        "",
+        "## 二、章节基础信息",
+        "",
+        f"- 章节号：{chapter}",
+        f"- 章节标题：{title}",
+        f"- 所属卷：{volume}",
+        "",
+        "## 三、前情提要",
+        "",
+        f"- {previous_context}",
+        "",
+        "## 四、本章硬目标",
+        "",
+        f"- 本章核心目标：{goal}",
+        f"- 目标字数：约 {target_words} 字",
+        f"- 章末收束类型：{ending_type}",
+        f"- 下一章承接方向：{ending_hint}",
+        "",
+        "## 五、必须调用的连续性信息",
+        "",
+        "### 关键角色",
+        "",
+    ]
+    for item in key_characters:
+        lines.append(f"- {item}")
+    lines.extend(["", "### 关键势力", ""])
+    for item in key_factions:
+        lines.append(f"- {item}")
+    lines.extend(["", "### 关键伏笔", ""])
+    for item in key_foreshadows:
+        lines.append(f"- {item}")
+    lines.extend(["", "### 能力 / 资源快照", ""])
+    for item in power_snapshot:
+        lines.append(f"- {item}")
+    lines.extend([
+        "",
+        "## 六、节拍执行清单",
+        "",
+    ])
+    for idx, beat in enumerate(beats, start=1):
+        lines.extend(
+            [
+                f"### 节拍 {idx}《{beat['name']}》",
+                "",
+                f"- 预算：约 {beat['budget']} 字",
+                f"- 本节功能：{beat['function']}",
+                f"- 场景种子：{beat.get('scene_seed', beat['key_action'])}",
+                f"- 必须发生：{beat['key_action']}",
+                f"- 冲突焦点：{beat.get('conflict_focus', beat['function'])}",
+                f"- 结果落点：{beat['landing']}",
+                f"- 不要写成：{beat.get('taboo', '不要写成空转说明。')}",
+                "",
+            ]
+        )
+    lines.extend(["## 七、必须落地的节点", ""])
+    for idx, node in enumerate(must_nodes, start=1):
+        lines.append(f"- 节点 {idx}：{node}")
+    lines.extend(["", "## 八、风格要求", ""])
+    for item in style_rules:
+        lines.append(f"- {item}")
+    lines.extend(["", "## 九、关键 state 约束", ""])
+    for key, value in state_constraints.items():
+        lines.append(f"- {key}：{value}")
+    lines.extend(
+        [
+            "",
+            "## 十、禁忌项",
+            "",
+        ]
+    )
+    for item in taboos:
+        lines.append(f"- {item}")
+    lines.extend(
+        [
+            "",
+            "## 十一、输出格式要求",
+            "",
+            f"- 直接输出第{chapter}章《{title}》的正文",
+            "- 不输出分析说明",
+            "- 保持以正文为主，不要重复提示词结构",
+            "- 段落偏短，优先保证移动端阅读节奏",
+            "- 每个节拍都要有真实推进，不要只做概念复述",
+        ]
+    )
+    return "\n".join(lines) + "\n"
 
 
 def render_plan_check_md(plan: dict) -> str:

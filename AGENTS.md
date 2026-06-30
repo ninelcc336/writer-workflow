@@ -20,14 +20,15 @@
 2. `docs/workflow.md`
 3. `docs/init-book.md`
 4. `docs/plan-chapter.md`
-5. `docs/draft-chapter.md`
-6. `docs/humanize-chapter.md`
-7. `docs/review-draft.md`
-8. `docs/sync-state.md`
-9. `docs/render-artifacts.md`
-10. `docs/review-checklist.md`
-11. `book/canon/`
-12. `book/state/`
+5. `docs/prompt-chapter.md`
+6. `docs/draft-chapter.md`
+7. `docs/humanize-chapter.md`
+8. `docs/review-draft.md`
+9. `docs/sync-state.md`
+10. `docs/render-artifacts.md`
+11. `docs/review-checklist.md`
+12. `book/canon/`
+13. `book/state/`
 
 如果 `book/canon/` 或 `book/state/` 尚未建立完整基础文件，必须先进入初始化流程。
 
@@ -70,12 +71,13 @@
 
 1. `plan-chapter`
 2. 等待人类审核章节计划
-3. `draft-chapter`
-4. `humanize-chapter`
-5. `review-draft`
-6. 等待人类审核正文
-7. `sync-state`
-8. `render-artifacts`
+3. `prompt-chapter`
+4. `draft-chapter`
+5. `humanize-chapter`
+6. `review-draft`
+7. 等待人类审核正文
+8. `sync-state`
+9. `render-artifacts`
 
 ## 5. 两个人工审核节点
 
@@ -115,6 +117,7 @@
 - 输出章节计划
 - 输出必写节点、字数预算、风险点
 - 输出章末落点和计划检查结果
+- 输出正文骨架 / 提示词
 
 ### Drafter
 

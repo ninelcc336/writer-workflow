@@ -98,12 +98,13 @@ V1 不做的事：
 
 1. `plan-chapter`
 2. 人审章节计划
-3. `draft-chapter`
-4. `humanize-chapter`
-5. `review-draft`
-6. 人审正文
-7. `sync-state`
-8. `render-artifacts`
+3. `prompt-chapter`
+4. `draft-chapter`（可选）
+5. `humanize-chapter`
+6. `review-draft`
+7. 人审正文
+8. `sync-state`
+9. `render-artifacts`
 
 ### 4.3 硬边界
 

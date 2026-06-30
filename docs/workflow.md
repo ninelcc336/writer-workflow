@@ -41,16 +41,21 @@
 
 1. `plan-chapter`
 2. 人工审核章节计划
-3. `draft-chapter`
-4. `humanize-chapter`
-5. `review-draft`
-6. 人工审核正文
-7. `sync-state`
-8. `render-artifacts`
+3. `prompt-chapter`
+4. `draft-chapter`（可选）
+5. `humanize-chapter`
+6. `review-draft`
+7. 人工审核正文
+8. `sync-state`
+9. `render-artifacts`
 
 `plan-chapter` 的详细执行规则见：
 
 - `docs/plan-chapter.md`
+
+`prompt-chapter` 的详细执行规则见：
+
+- `docs/prompt-chapter.md`
 
 `draft-chapter` 的详细执行规则见：
 
@@ -76,7 +81,8 @@
 
 - `chapter_brief` 是章节输入简报，通常由人提供或先行整理
 - `chapter_plan` 是 agent 基于 brief、canon、state 产出的施工图
-- `chapter_draft` 是 agent 按 plan 写出的正文初稿
+- `chapter_prompt` 是 agent 基于 plan 组装出的正文骨架 / 提示词
+- `chapter_draft` 是 agent 基于 prompt 写出的正文初稿
 - `chapter_humanized_draft` 是 agent 对正文初稿做的主动修订版本
 - `draft_review` 是 agent 对正文初稿做的人审前质检报告
 - `state_diff` 是 agent 在正文通过人审后生成的事实回写报告
@@ -100,6 +106,10 @@
 建议直接使用模板：
 
 - `templates/chapter_plan.template.md`
+
+计划通过后，建议先生成：
+
+- `book/drafts/chapter-XXX/prompt.md`
 
 ### 正文审核
 

@@ -1,19 +1,20 @@
 protagonist:
   baseline_power: 待补充
   current_constraints:
-    - 待补充
+    - 主角当前能力上限、资源短缺或规则代价
 
 systems_or_rules:
-  - 待补充
+  - 主卖点相关系统或世界硬规则
+  - 一旦确认就不能随意改写的成长或惩罚机制
 
 key_items:
-  - 待补充
+  - 会持续影响后续剧情判断的重要装备或道具
 
 companions:
-  - 待补充
+  - 会持续影响战力或情节判断的搭档 / 宠物 / 从属战力
 
 base_or_assets:
-  - 待补充
+  - 基地、载具、组织、避难所等长期资产
 
 rare_resources:
-  - 待补充
+  - 后续必须记住去向和消耗的稀有资源

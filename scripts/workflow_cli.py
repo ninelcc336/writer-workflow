@@ -4,6 +4,7 @@ import argparse
 import re
 import shutil
 import sys
+from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
@@ -55,6 +56,8 @@ def main() -> int:
         return run_init_state(Path(args.root).resolve(), force=args.force)
     if command == "plan-chapter":
         return run_plan_chapter(args)
+    if command == "record-review":
+        return run_record_review(args)
     if command == "prompt-chapter":
         return run_prompt_chapter(args)
     if command == "draft-chapter":
@@ -108,6 +111,21 @@ def build_parser() -> argparse.ArgumentParser:
     plan_parser.add_argument("--ending-type", default="钩子推进", help="章末落点类型")
     plan_parser.add_argument("--must-payoff", action="append", default=[], help="必须处理的伏笔 ID，可重复传入")
     plan_parser.add_argument("--force", action="store_true", help="覆盖已有计划文件")
+
+    human_review_parser = subparsers.add_parser("record-review", help="记录人工审核结论")
+    add_root_arg(human_review_parser)
+    add_chapter_arg(human_review_parser)
+    human_review_parser.add_argument("--stage", choices=["plan", "final"], required=True, help="审核阶段")
+    human_review_parser.add_argument(
+        "--decision",
+        choices=["approved", "changes_requested", "rejected"],
+        required=True,
+        help="审核结论",
+    )
+    human_review_parser.add_argument("--reviewer", default="human", help="审核人标识")
+    human_review_parser.add_argument("--notes", default="", help="审核备注")
+    human_review_parser.add_argument("--source-file", help="可选，记录对应文件路径")
+    human_review_parser.add_argument("--force", action="store_true", help="覆盖已有审核记录")
 
     prompt_parser = subparsers.add_parser("prompt-chapter", help="生成正文骨架 / 提示词")
     add_root_arg(prompt_parser)
@@ -289,12 +307,64 @@ def run_plan_chapter(args: argparse.Namespace) -> int:
     return 0 if written else 1
 
 
+def run_record_review(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    chapter_dir = get_chapter_dir(root, args.chapter)
+    chapter_dir.mkdir(parents=True, exist_ok=True)
+    review_path = get_human_review_path(chapter_dir, args.stage)
+
+    if args.stage == "plan":
+        plan_data = load_plan_data(chapter_dir)
+        if not plan_data:
+            print("record-review 无法执行：缺少 plan.data.yaml。", file=sys.stderr)
+            return 1
+        title = plan_data["title"]
+        source_name = Path(args.source_file).name if args.source_file else "plan.md"
+    else:
+        final_path = Path(args.source_file).resolve() if args.source_file else chapter_dir / "final.md"
+        if not final_path.exists():
+            print("record-review 无法执行：final 阶段需要已存在的正式版本文件。", file=sys.stderr)
+            return 1
+        plan_data = load_plan_data(chapter_dir) or {}
+        title = plan_data.get("title", f"第{args.chapter}章")
+        source_name = final_path.name
+
+    decision_map = {
+        "approved": "通过",
+        "changes_requested": "需修改",
+        "rejected": "拒绝",
+    }
+    reviewed_at = datetime.now().isoformat(timespec="seconds")
+    payload = {
+        "chapter": args.chapter,
+        "stage": args.stage,
+        "decision": args.decision,
+        "decision_label": decision_map[args.decision],
+        "reviewer": args.reviewer,
+        "reviewed_at": reviewed_at,
+        "source_file": source_name,
+        "notes": args.notes.strip(),
+    }
+    report_path = root / "book" / "artifacts" / "reports" / f"chapter-{format_chapter(args.chapter)}-{args.stage}-human-review.md"
+    files = [
+        (review_path, dump_yaml(payload)),
+        (report_path, render_human_review_md(payload, title=title)),
+    ]
+    written, skipped = write_files(files, force=args.force)
+    print_write_summary("record-review", root, written, skipped)
+    return 0 if written else 1
+
+
 def run_prompt_chapter(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     chapter_dir = get_chapter_dir(root, args.chapter)
     plan_data = load_plan_data(chapter_dir)
     if not plan_data:
         print("prompt-chapter 无法执行：缺少 plan.data.yaml，请先执行 plan-chapter。", file=sys.stderr)
+        return 1
+    plan_gate = require_human_review_approval(chapter_dir, "plan")
+    if not plan_gate[0]:
+        print(f"prompt-chapter 无法执行：{plan_gate[1]}", file=sys.stderr)
         return 1
 
     protagonist_name = extract_protagonist_name(root) or "主角"
@@ -379,6 +449,10 @@ def run_prompt_chapter(args: argparse.Namespace) -> int:
 def run_draft_chapter(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     chapter_dir = get_chapter_dir(root, args.chapter)
+    plan_gate = require_human_review_approval(chapter_dir, "plan")
+    if not plan_gate[0]:
+        print(f"draft-chapter 无法执行：{plan_gate[1]}", file=sys.stderr)
+        return 1
     prompt_data = load_yaml(chapter_dir / "prompt.data.yaml")
     prompt_path = chapter_dir / "prompt.md"
     if not prompt_data or not prompt_path.exists():
@@ -462,6 +536,10 @@ def run_draft_chapter(args: argparse.Namespace) -> int:
 def run_humanize_chapter(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     chapter_dir = get_chapter_dir(root, args.chapter)
+    plan_gate = require_human_review_approval(chapter_dir, "plan")
+    if not plan_gate[0]:
+        print(f"humanize-chapter 无法执行：{plan_gate[1]}", file=sys.stderr)
+        return 1
     source_path = Path(args.source_file).resolve() if args.source_file else detect_latest_draft(chapter_dir)
     if not source_path or not source_path.exists():
         print("humanize-chapter 无法执行：找不到草稿文件。", file=sys.stderr)
@@ -495,6 +573,10 @@ def run_humanize_chapter(args: argparse.Namespace) -> int:
 def run_review_draft(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     chapter_dir = get_chapter_dir(root, args.chapter)
+    plan_gate = require_human_review_approval(chapter_dir, "plan")
+    if not plan_gate[0]:
+        print(f"review-draft 无法执行：{plan_gate[1]}", file=sys.stderr)
+        return 1
     draft_path = Path(args.draft_file).resolve() if args.draft_file else detect_review_target(chapter_dir)
     if not draft_path or not draft_path.exists():
         print("review-draft 无法执行：找不到待审稿文件。", file=sys.stderr)
@@ -595,74 +677,59 @@ def run_sync_state(args: argparse.Namespace) -> int:
     if review_data.get("blockers"):
         print("sync-state 无法执行：当前章仍存在未处理的 blocker。", file=sys.stderr)
         return 1
+    final_gate = require_human_review_approval(chapter_dir, "final")
+    if not final_gate[0]:
+        print(f"sync-state 无法执行：{final_gate[1]}", file=sys.stderr)
+        return 1
 
     text = final_path.read_text(encoding="utf-8")
+    if PLACEHOLDER in text:
+        print("sync-state 无法执行：final.md 仍包含“待补充”。", file=sys.stderr)
+        return 1
     characters = load_yaml(root / "book" / "state" / "characters.yaml") or []
     factions = load_yaml(root / "book" / "state" / "factions.yaml") or []
     foreshadows = load_yaml(root / "book" / "state" / "foreshadows.yaml") or []
     power_state = load_yaml(root / "book" / "state" / "power_state.yaml") or {}
     chapter_index = load_yaml(root / "book" / "state" / "chapter_index.yaml") or []
+    readiness = state_is_ready_for_planning(root)
+    if not readiness[0]:
+        print(f"sync-state 无法执行：{readiness[1]}", file=sys.stderr)
+        return 1
 
-    character_changes = []
-    for item in characters:
-        name = str(item.get("name", ""))
-        if name and name != PLACEHOLDER and name in text:
-            old = item.get("latest_chapter", 0)
-            item["latest_chapter"] = args.chapter
-            if old != args.chapter:
-                character_changes.append(f"{name} 最近出场章节更新为 Ch{args.chapter}")
+    state_update_path = chapter_dir / "state-update.yaml"
+    if not state_update_path.exists():
+        scaffold = build_state_update_scaffold(args.chapter, plan_data, final_path.name, text)
+        state_update_path.write_text(dump_yaml(scaffold), encoding="utf-8")
+        print("sync-state 无法执行：缺少 state-update.yaml，已生成待填写脚手架。", file=sys.stderr)
+        return 1
 
-    payoff_ids = plan_data.get("must_payoff_ids", [])
-    foreshadow_changes = []
-    if payoff_ids:
-        for payoff_id in payoff_ids:
-            matched = False
-            for item in foreshadows:
-                if item.get("id") == payoff_id:
-                    item["current_status"] = "advanced"
-                    item["last_progress_chapter"] = args.chapter
-                    foreshadow_changes.append(f"伏笔 {payoff_id} 标记为 advanced")
-                    matched = True
-                    break
-            if not matched:
-                foreshadows.append(
-                    {
-                        "id": payoff_id,
-                        "description": f"由章节计划引入的跟踪项：{payoff_id}",
-                        "introduced_in": args.chapter,
-                        "current_status": "advanced",
-                        "related_characters": [],
-                        "expected_payoff_window": "待补充",
-                        "last_progress_chapter": args.chapter,
-                    }
-                )
-                foreshadow_changes.append(f"新增伏笔跟踪项 {payoff_id}")
+    state_update = load_yaml(state_update_path)
+    validation_error = validate_state_update(state_update, final_text=text)
+    if validation_error:
+        print(f"sync-state 无法执行：{validation_error}", file=sys.stderr)
+        return 1
 
-    hook_id = f"hook-ch{format_chapter(args.chapter)}"
-    ending_hint = plan_data.get("ending_hint", "")
-    foreshadows.append(
-        {
-            "id": hook_id,
-            "description": ending_hint or plan_data.get("ending_type", "本章章末钩子"),
-            "introduced_in": args.chapter,
-            "current_status": "open",
-            "related_characters": [],
-            "expected_payoff_window": "下一章",
-            "last_progress_chapter": args.chapter,
-        }
-    )
-    foreshadow_changes.append(f"新增章末钩子追踪项 {hook_id}")
+    try:
+        character_changes = apply_character_updates(characters, state_update.get("characters", []), args.chapter, text)
+        faction_changes = apply_faction_updates(factions, state_update.get("factions", []), args.chapter, text)
+        foreshadow_changes = apply_foreshadow_updates(foreshadows, state_update.get("foreshadows", []), args.chapter, text)
+        power_changes = apply_power_updates(power_state, state_update.get("power_state", {}), text)
+    except ValueError as exc:
+        print(f"sync-state 无法执行：{exc}", file=sys.stderr)
+        return 1
 
-    summary = summarize_text(text, 80)
+    chapter_index_payload = state_update.get("chapter_index", {}) if isinstance(state_update, dict) else {}
+    summary = chapter_index_payload.get("summary") or summarize_text(text, 80)
+    ending_hint = chapter_index_payload.get("ending_hook") or plan_data.get("ending_hint", "") or plan_data.get("ending_type", "待补充")
     chapter_record = {
         "chapter_no": args.chapter,
         "title": plan_data["title"],
         "volume": plan_data["volume"],
         "status": "final",
         "summary": summary,
-        "must_payoff_ids": payoff_ids,
-        "new_state_changes": character_changes + foreshadow_changes,
-        "ending_hook": ending_hint or plan_data.get("ending_type", "待补充"),
+        "must_payoff_ids": chapter_index_payload.get("must_payoff_ids") or plan_data.get("must_payoff_ids", []),
+        "new_state_changes": chapter_index_payload.get("new_state_changes") or character_changes + faction_changes + foreshadow_changes + power_changes,
+        "ending_hook": ending_hint,
     }
     upsert_chapter_index(chapter_index, chapter_record)
 
@@ -674,20 +741,22 @@ def run_sync_state(args: argparse.Namespace) -> int:
 
     no_changes = []
     if not character_changes:
-        no_changes.append("角色状态未自动检测到结构性变化")
+        no_changes.append("角色状态未写入结构性变化")
+    if not faction_changes:
+        no_changes.append("势力状态未写入结构性变化")
     if not foreshadow_changes:
-        no_changes.append("伏笔状态未自动检测到变化")
-    if not factions:
-        no_changes.append("暂无势力信息")
+        no_changes.append("伏笔状态未写入结构性变化")
+    if not power_changes:
+        no_changes.append("能力 / 资源状态未写入结构性变化")
 
     report_md = render_state_diff_md(
         chapter=args.chapter,
         title=plan_data["title"],
         final_name=final_path.name,
         character_changes=character_changes,
-        faction_changes=[],
+        faction_changes=faction_changes,
         foreshadow_changes=foreshadow_changes,
-        power_changes=[],
+        power_changes=power_changes,
         no_changes=no_changes,
     )
     report_path = root / "book" / "artifacts" / "reports" / f"chapter-{format_chapter(args.chapter)}-state-diff.md"
@@ -804,6 +873,10 @@ def format_chapter(chapter: int) -> str:
     return f"{chapter:03d}"
 
 
+def get_human_review_path(chapter_dir: Path, stage: str) -> Path:
+    return chapter_dir / f"human-{stage}-review.yaml"
+
+
 def extract_book_title(root: Path) -> str | None:
     premise_path = root / "book" / "canon" / "premise.md"
     if not premise_path.exists():
@@ -855,17 +928,131 @@ def extract_protagonist_name(root: Path) -> str | None:
 
 
 def state_is_ready_for_planning(root: Path) -> tuple[bool, str]:
-    characters = load_yaml(root / "book" / "state" / "characters.yaml")
     premise = root / "book" / "canon" / "premise.md"
     setting = root / "book" / "canon" / "setting.md"
     if not premise.exists() or not setting.exists():
         return False, "canon 基础文件缺失。"
-    if not characters:
-        return False, "characters.yaml 缺失或为空。"
-    protagonist = characters[0]
-    if protagonist.get("name") in (None, "", PLACEHOLDER):
-        return False, "主角名称仍是占位值。"
+
+    issues = collect_init_readiness_issues(root)
+    if issues:
+        return False, f"初始化信息不足，至少先补齐这些关键项：{'；'.join(issues[:6])}"
     return True, ""
+
+
+def require_human_review_approval(chapter_dir: Path, stage: str) -> tuple[bool, str]:
+    review_data = load_yaml(get_human_review_path(chapter_dir, stage))
+    if not review_data:
+        stage_label = "章节计划" if stage == "plan" else "正文定稿"
+        return False, f"缺少 {stage_label} 的人工审核记录，请先执行 record-review。"
+    if review_data.get("decision") != "approved":
+        stage_label = "章节计划" if stage == "plan" else "正文定稿"
+        return False, f"{stage_label} 当前未被标记为 approved。"
+    return True, ""
+
+
+def collect_init_readiness_issues(root: Path) -> list[str]:
+    issues: list[str] = []
+
+    premise_path = root / "book" / "canon" / "premise.md"
+    setting_path = root / "book" / "canon" / "setting.md"
+    style_path = root / "book" / "canon" / "style_rules.md"
+    protagonist_path = root / "book" / "canon" / "characters" / "protagonist.md"
+    volume_path = root / "book" / "canon" / "volumes" / "volume-01-outline.md"
+    characters_path = root / "book" / "state" / "characters.yaml"
+    power_path = root / "book" / "state" / "power_state.yaml"
+
+    issues.extend(check_markdown_bullets(premise_path, ["核心上头点", "主线问题"], "premise.md"))
+    issues.extend(check_markdown_bullets(setting_path, ["时间背景", "空间背景", "社会环境", "约束条件"], "setting.md"))
+    issues.extend(check_markdown_bullets(style_path, ["目标气质", "钩子类型偏好"], "style_rules.md"))
+    issues.extend(check_markdown_bullets(protagonist_path, ["身份", "初始处境", "短期必须解决的问题"], "protagonist.md"))
+
+    volume_text = volume_path.read_text(encoding="utf-8") if volume_path.exists() else ""
+    if not volume_text:
+        issues.append("volume-01-outline.md 缺失")
+    else:
+        issues.extend(check_section_bullets(volume_text, "### 阶段一", ["冲突", "结果"], "volume-01-outline.md"))
+
+    characters = load_yaml(characters_path) or []
+    if not isinstance(characters, list) or not characters:
+        issues.append("characters.yaml 缺少主角条目")
+    else:
+        protagonist = characters[0]
+        for key, label in [
+            ("name", "characters.yaml 主角 name"),
+            ("current_location", "characters.yaml 主角 current_location"),
+            ("capability_summary", "characters.yaml 主角 capability_summary"),
+        ]:
+            if not is_actionable_context(protagonist.get(key)):
+                issues.append(f"{label} 仍是占位值")
+        open_threads = protagonist.get("open_threads") or []
+        if not isinstance(open_threads, list) or not any(is_actionable_context(item) for item in open_threads):
+            issues.append("characters.yaml 主角 open_threads 仍未填实")
+
+    power_state = load_yaml(power_path) or {}
+    if not isinstance(power_state, dict):
+        issues.append("power_state.yaml 结构无效")
+    else:
+        protagonist_power = power_state.get("protagonist", {}) if isinstance(power_state.get("protagonist"), dict) else {}
+        if not is_actionable_context(protagonist_power.get("baseline_power")):
+            issues.append("power_state.yaml protagonist.baseline_power 仍是占位值")
+        constraints = protagonist_power.get("current_constraints") or []
+        if not isinstance(constraints, list) or not any(is_actionable_context(item) for item in constraints):
+            issues.append("power_state.yaml protagonist.current_constraints 仍未填实")
+        rules = power_state.get("systems_or_rules") or []
+        if not isinstance(rules, list) or not any(is_actionable_context(item) for item in rules):
+            issues.append("power_state.yaml systems_or_rules 仍未填实")
+
+    return issues
+
+
+def check_markdown_bullets(path: Path, labels: list[str], file_label: str) -> list[str]:
+    if not path.exists():
+        return [f"{file_label} 缺失"]
+    text = path.read_text(encoding="utf-8")
+    issues = []
+    for label in labels:
+        value = extract_markdown_bullet_value(text, label)
+        if not is_actionable_context(value):
+            issues.append(f"{file_label} 的“{label}”仍是占位值")
+    return issues
+
+
+def extract_markdown_bullet_value(text: str, label: str) -> str | None:
+    match = re.search(rf"- {re.escape(label)}：(.+)", text)
+    return match.group(1).strip() if match else None
+
+
+def check_section_bullets(text: str, heading: str, labels: list[str], file_label: str) -> list[str]:
+    section = extract_heading_section(text, heading)
+    if not section:
+        return [f"{file_label} 缺少 {heading}"]
+    issues = []
+    for label in labels:
+        value = extract_markdown_bullet_value(section, label)
+        if not is_actionable_context(value):
+            issues.append(f"{file_label} 的 {heading} -> “{label}”仍是占位值")
+    return issues
+
+
+def extract_heading_section(text: str, heading: str) -> str:
+    lines = text.splitlines()
+    collected: list[str] = []
+    in_section = False
+    current_level = None
+    for raw_line in lines:
+        line = raw_line.rstrip()
+        if line.startswith("#"):
+            level = len(line) - len(line.lstrip("#"))
+            if line.strip() == heading:
+                in_section = True
+                current_level = level
+                collected.append(line)
+                continue
+            if in_section and current_level is not None and level <= current_level:
+                break
+        if in_section:
+            collected.append(line)
+    return "\n".join(collected).strip()
 
 
 def load_brief_text(args: argparse.Namespace) -> str | None:
@@ -1201,6 +1388,272 @@ def build_draft_continuity_hints(prompt_data: dict) -> list[str]:
         if len(hints) >= 4:
             break
     return hints
+
+
+def build_state_update_scaffold(chapter: int, plan_data: dict, final_name: str, final_text: str) -> dict:
+    return {
+        "meta": {
+            "chapter": chapter,
+            "title": plan_data.get("title", f"第{chapter}章"),
+            "source_final": final_name,
+            "instructions": [
+                "只填写正文里明确出现、且会影响后续写作判断的长期事实",
+                "每个更新项都必须填写 evidence，且 evidence 片段应直接来自 final.md",
+                "没有发生变化的领域保持空列表，不要凭推测补写",
+            ],
+        },
+        "characters": [],
+        "factions": [],
+        "foreshadows": [],
+        "power_state": {
+            "protagonist": {
+                "baseline_power": "",
+                "current_constraints_add": [],
+            },
+            "systems_or_rules_add": [],
+            "key_items_add": [],
+            "companions_add": [],
+            "base_or_assets_add": [],
+            "rare_resources_add": [],
+        },
+        "chapter_index": {
+            "summary": summarize_text(final_text, 80),
+            "ending_hook": plan_data.get("ending_hint", ""),
+            "must_payoff_ids": plan_data.get("must_payoff_ids", []),
+            "new_state_changes": [],
+        },
+    }
+
+
+def validate_state_update(state_update, *, final_text: str) -> str | None:
+    if not isinstance(state_update, dict):
+        return "state-update.yaml 结构无效。"
+    for key in ["characters", "factions", "foreshadows"]:
+        value = state_update.get(key, [])
+        if not isinstance(value, list):
+            return f"state-update.yaml 的 {key} 必须是列表。"
+        for item in value:
+            if not isinstance(item, dict):
+                return f"state-update.yaml 的 {key} 中存在非法条目。"
+            evidence = item.get("evidence")
+            if not is_actionable_context(evidence):
+                return f"{key} 中每个条目都必须填写 evidence。"
+            if not evidence_matches_final(str(evidence), final_text):
+                return f"{key} 中存在 evidence 无法在 final.md 中找到的条目。"
+
+    power_state = state_update.get("power_state", {})
+    if power_state and not isinstance(power_state, dict):
+        return "state-update.yaml 的 power_state 必须是对象。"
+
+    chapter_index = state_update.get("chapter_index", {})
+    if chapter_index and not isinstance(chapter_index, dict):
+        return "state-update.yaml 的 chapter_index 必须是对象。"
+    summary = chapter_index.get("summary")
+    if summary is not None and not is_actionable_context(summary):
+        return "state-update.yaml 的 chapter_index.summary 不能为空或占位。"
+    ending_hook = chapter_index.get("ending_hook")
+    if ending_hook is not None and not is_actionable_context(ending_hook):
+        return "state-update.yaml 的 chapter_index.ending_hook 不能为空或占位。"
+    return None
+
+
+def evidence_matches_final(evidence: str, final_text: str) -> bool:
+    fragment = normalize_search_text(evidence)
+    target = normalize_search_text(final_text)
+    if len(fragment) < 4:
+        return False
+    return fragment[: min(len(fragment), 12)] in target
+
+
+def normalize_search_text(text: str) -> str:
+    return re.sub(r"[：:，。、“”\"'（）()\-\s]", "", text)
+
+
+def apply_character_updates(characters: list[dict], updates: list[dict], chapter: int, final_text: str) -> list[str]:
+    changes: list[str] = []
+    for update in updates:
+        identifier = update.get("id")
+        name = update.get("name")
+        item = find_record(characters, identifier=identifier, name=name)
+        if item is None:
+            if not identifier or not name:
+                raise ValueError("characters 更新缺少 id / name，无法新增。")
+            item = {
+                "id": identifier,
+                "name": name,
+                "faction": "待补充",
+                "status": "alive",
+                "current_location": "待补充",
+                "relationship_to_protagonist": "待补充",
+                "capability_summary": "待补充",
+                "latest_chapter": chapter,
+                "open_threads": [],
+            }
+            characters.append(item)
+            changes.append(f"新增角色 {name}")
+        touched = False
+        for key in ["faction", "status", "current_location", "relationship_to_protagonist", "capability_summary"]:
+            if is_actionable_context(update.get(key)):
+                item[key] = update[key]
+                touched = True
+        if update.get("latest_chapter") is not None:
+            item["latest_chapter"] = int(update["latest_chapter"])
+            touched = True
+        else:
+            item["latest_chapter"] = chapter
+        extra_threads = [value for value in normalize_text_list(update.get("open_threads_add")) if is_actionable_context(value)]
+        if extra_threads:
+            item.setdefault("open_threads", [])
+            for thread in extra_threads:
+                if thread not in item["open_threads"]:
+                    item["open_threads"].append(thread)
+                    touched = True
+        if touched:
+            label = item.get("name", identifier or "角色")
+            changes.append(f"{label} 状态已按本章正式版回写")
+    return deduplicate_preserve_order(changes)
+
+
+def apply_faction_updates(factions: list[dict], updates: list[dict], chapter: int, final_text: str) -> list[str]:
+    changes: list[str] = []
+    for update in updates:
+        identifier = update.get("id")
+        name = update.get("name")
+        item = find_record(factions, identifier=identifier, name=name)
+        if item is None:
+            if not identifier or not name:
+                raise ValueError("factions 更新缺少 id / name，无法新增。")
+            item = {
+                "id": identifier,
+                "name": name,
+                "leader": update.get("leader", "待补充"),
+                "members_summary": update.get("members_summary", "待补充"),
+                "territory": update.get("territory", "待补充"),
+                "resources": [],
+                "relationship_to_protagonist": update.get("relationship_to_protagonist", "待补充"),
+                "latest_change_chapter": chapter,
+            }
+            factions.append(item)
+            changes.append(f"新增势力 {name}")
+        touched = False
+        for key in ["leader", "members_summary", "territory", "relationship_to_protagonist"]:
+            if is_actionable_context(update.get(key)):
+                item[key] = update[key]
+                touched = True
+        resources_add = [value for value in normalize_text_list(update.get("resources_add")) if is_actionable_context(value)]
+        if resources_add:
+            item.setdefault("resources", [])
+            for resource in resources_add:
+                if resource not in item["resources"]:
+                    item["resources"].append(resource)
+                    touched = True
+        if touched:
+            item["latest_change_chapter"] = chapter
+            changes.append(f"{item.get('name', identifier or '势力')} 状态已按本章正式版回写")
+    return deduplicate_preserve_order(changes)
+
+
+def apply_foreshadow_updates(foreshadows: list[dict], updates: list[dict], chapter: int, final_text: str) -> list[str]:
+    changes: list[str] = []
+    for update in updates:
+        identifier = update.get("id")
+        action = update.get("action")
+        if not identifier or action not in {"add", "advance", "resolve", "close"}:
+            raise ValueError("foreshadows 更新必须包含 id 和合法 action。")
+        item = find_record(foreshadows, identifier=identifier, name=None)
+        if item is None and action != "add":
+            raise ValueError(f"伏笔 {identifier} 不存在，不能执行 {action}。")
+        if item is None:
+            item = {
+                "id": identifier,
+                "description": update.get("description", "待补充"),
+                "introduced_in": chapter,
+                "current_status": update.get("current_status", "open"),
+                "related_characters": normalize_text_list(update.get("related_characters")),
+                "expected_payoff_window": update.get("expected_payoff_window", "待补充"),
+                "last_progress_chapter": chapter,
+            }
+            foreshadows.append(item)
+            changes.append(f"新增伏笔 {identifier}")
+        else:
+            status_map = {
+                "advance": "advanced",
+                "resolve": "resolved",
+                "close": "closed",
+                "add": update.get("current_status", "open"),
+            }
+            item["current_status"] = status_map[action]
+            item["last_progress_chapter"] = chapter
+            if is_actionable_context(update.get("description")):
+                item["description"] = update["description"]
+            related_characters = [value for value in normalize_text_list(update.get("related_characters")) if is_actionable_context(value)]
+            if related_characters:
+                item["related_characters"] = related_characters
+            if is_actionable_context(update.get("expected_payoff_window")):
+                item["expected_payoff_window"] = update["expected_payoff_window"]
+            changes.append(f"伏笔 {identifier} 已标记为 {item['current_status']}")
+    return deduplicate_preserve_order(changes)
+
+
+def apply_power_updates(power_state: dict, updates: dict, final_text: str) -> list[str]:
+    if not updates:
+        return []
+    if not isinstance(power_state, dict):
+        raise ValueError("power_state 当前结构无效。")
+    if not isinstance(updates, dict):
+        raise ValueError("state-update.yaml 的 power_state 结构无效。")
+    changes: list[str] = []
+
+    protagonist = power_state.setdefault("protagonist", {})
+    protagonist_updates = updates.get("protagonist", {})
+    if protagonist_updates and not isinstance(protagonist_updates, dict):
+        raise ValueError("power_state.protagonist 更新结构无效。")
+    baseline_power = protagonist_updates.get("baseline_power") if isinstance(protagonist_updates, dict) else None
+    if is_actionable_context(baseline_power):
+        protagonist["baseline_power"] = baseline_power
+        changes.append("主角基础战力已更新")
+    constraints_add = [value for value in normalize_text_list(protagonist_updates.get("current_constraints_add")) if is_actionable_context(value)] if isinstance(protagonist_updates, dict) else []
+    if constraints_add:
+        protagonist.setdefault("current_constraints", [])
+        for value in constraints_add:
+            if value not in protagonist["current_constraints"]:
+                protagonist["current_constraints"].append(value)
+                changes.append("主角限制条件已更新")
+
+    for key, label in [
+        ("systems_or_rules_add", "系统 / 规则"),
+        ("key_items_add", "关键物品"),
+        ("companions_add", "同伴战力"),
+        ("base_or_assets_add", "基地 / 资产"),
+        ("rare_resources_add", "稀有资源"),
+    ]:
+        values = [value for value in normalize_text_list(updates.get(key)) if is_actionable_context(value)]
+        if not values:
+            continue
+        target_key = key.replace("_add", "")
+        power_state.setdefault(target_key, [])
+        for value in values:
+            if value not in power_state[target_key]:
+                power_state[target_key].append(value)
+                changes.append(f"{label} 已更新")
+    return deduplicate_preserve_order(changes)
+
+
+def find_record(items: list[dict], *, identifier, name):
+    for item in items:
+        if identifier and item.get("id") == identifier:
+            return item
+        if name and item.get("name") == name:
+            return item
+    return None
+
+
+def deduplicate_preserve_order(items: list[str]) -> list[str]:
+    result: list[str] = []
+    for item in items:
+        if item not in result:
+            result.append(item)
+    return result
 
 
 def build_beats(
@@ -1612,6 +2065,32 @@ def render_draft_review_md(
     return "\n".join(lines) + "\n"
 
 
+def render_human_review_md(review: dict, *, title: str) -> str:
+    stage_map = {
+        "plan": "章节计划审核",
+        "final": "正文定稿审核",
+    }
+    lines = [
+        "# 人工审核记录",
+        "",
+        "## 一、基础信息",
+        "",
+        f"- 章节号：{review['chapter']}",
+        f"- 章节标题：{title}",
+        f"- 审核阶段：{stage_map.get(review['stage'], review['stage'])}",
+        f"- 审核结论：{review['decision_label']}",
+        f"- 审核人：{review['reviewer']}",
+        f"- 审核时间：{review['reviewed_at']}",
+        f"- 对应文件：{review['source_file']}",
+        "",
+        "## 二、审核备注",
+        "",
+    ]
+    notes = review.get("notes", "").strip()
+    lines.append(f"- {notes if notes else '无'}")
+    return "\n".join(lines) + "\n"
+
+
 def summarize_text(text: str, max_chars: int) -> str:
     plain = re.sub(r"^#.+$", "", text, flags=re.MULTILINE).strip().replace("\n", "")
     return plain[:max_chars] + ("..." if len(plain) > max_chars else "")
@@ -1757,7 +2236,74 @@ def print_write_summary(command: str, root: Path, written: list[Path], skipped: 
                 print(f"- {path}")
 
 
+def infer_serial_mode(length: str) -> str:
+    digits = "".join(re.findall(r"\d+", length))
+    if digits:
+        value = int(digits)
+        if "万" in length:
+            if value >= 150:
+                return "超长连载"
+            if value >= 80:
+                return "长篇连载"
+            if value >= 30:
+                return "中长篇"
+    if "百万" in length or "100W" in length.upper():
+        return "长篇连载"
+    return "待确认篇幅模式"
+
+
+def build_platform_guidelines(platform: str) -> dict[str, str]:
+    platform_lower = platform.lower()
+    if "番茄" in platform:
+        return {
+            "reader_profile": "偏移动端追更读者，接受信息要快、冲突要早、章末承接要强",
+            "paragraph_rule": "默认短段，段落尽量控制在 1 到 3 句",
+            "hook_rule": "每章结尾必须留下明确承接点，优先用危机、收益、反转驱动追更",
+            "dialogue_rule": "对白要直给，少空转感慨，尽量让对白承担推进功能",
+        }
+    if "起点" in platform:
+        return {
+            "reader_profile": "偏网文核心读者，接受设定和升级体系，但要求兑现稳定",
+            "paragraph_rule": "段落可比移动端略长，但关键信息仍应拆开呈现",
+            "hook_rule": "章节结尾要么抛新问题，要么给新收益承诺，避免纯情绪停顿",
+            "dialogue_rule": "对白可承担设定解释，但必须夹带冲突或利益变化",
+        }
+    if "晋江" in platform:
+        return {
+            "reader_profile": "偏角色关系与情绪体验驱动读者，要求角色动机稳定",
+            "paragraph_rule": "保持清晰分段，情绪段可稍长，但不要失去推进",
+            "hook_rule": "章末优先留下关系变化、情绪反转或新信息钩子",
+            "dialogue_rule": "对白要带情绪与潜台词，避免机械解释",
+        }
+    if "纵横" in platform or "17k" in platform_lower:
+        return {
+            "reader_profile": "偏传统网文连载读者，接受体系和剧情并重",
+            "paragraph_rule": "段落控制在可快速扫描范围内，信息密度优先",
+            "hook_rule": "章末要保证下一章有可立即接续的动作线",
+            "dialogue_rule": "对白不宜拖泥带水，要服务阵营、利益和冲突",
+        }
+    return {
+        "reader_profile": "默认按网络连载读者处理，追求快进入、快推进、强承接",
+        "paragraph_rule": "默认短段，优先适配移动端阅读",
+        "hook_rule": "每章结尾必须为下一章留下明确承接理由",
+        "dialogue_rule": "对白优先承担推进，而不是重复说明",
+    }
+
+
+def build_serial_constraints(data: InitBookInput) -> dict[str, str]:
+    mode = infer_serial_mode(data.length)
+    return {
+        "serial_mode": mode,
+        "promise_rule": f"{mode} 默认按“长期连载承诺”处理，主线必须持续服务“{data.hook}”。",
+        "escalation_rule": "每一卷都必须让主角位置、资源规模或敌我强度发生可见升级。",
+        "continuity_rule": "影响后续判断的事实必须进入 state，不能只留在正文语气里。",
+        "audit_rule": "初始化只建立最小强约束，不替代后续人审和补充设定。",
+    }
+
+
 def render_premise_md(data: InitBookInput) -> str:
+    platform_profile = build_platform_guidelines(data.platform)
+    serial_constraints = build_serial_constraints(data)
     return dedent(
         f"""\
         # 书籍主旨
@@ -1766,24 +2312,48 @@ def render_premise_md(data: InitBookInput) -> str:
 
         - 《{data.title}》是一部面向 {data.platform} 的 {data.genre}，围绕“{data.hook}”展开，主角是 {data.protagonist}。
 
+        ## 读者承诺
+
+        - 核心上头点：每隔若干章节，读者都要看到“{data.hook}”带来的新收益、新代价或新危机。
+        - 主追更引擎：主角围绕“{data.hook}”持续变强、争夺、反杀或改写处境。
+        - 长篇模式：{serial_constraints['serial_mode']}
+
         ## 核心情绪价值
 
         - 读者看这本书主要获得什么：围绕“{data.hook}”建立长期追更动力，细化待补充。
+        - 读者每卷至少应获得什么：主角地位抬升、核心矛盾升级、主卖点兑现一次。
+
+        ## 长期主轴
+
+        - 主线问题：主角如何依靠“{data.hook}”从当前处境一路打到下一层级。
+        - 升级主轴：主角的力量、资源、人脉或阵营规模必须持续扩张，细节待补充。
+        - 承诺边界：所有重要支线最终都要回流主线，不能长期脱离核心卖点。
 
         ## 平台定位
 
         - 目标平台：{data.platform}
-        - 目标读者：待补充
-        - 核心标签：{data.genre} / 待补充
+        - 目标读者：{platform_profile['reader_profile']}
+        - 核心标签：{data.genre} / 长篇连载 / 待补充
+        - 阅读节奏要求：{platform_profile['paragraph_rule']}
 
         ## 禁止偏离项
 
-        - 这本书绝不能写成什么样：待补充
+        - 这本书绝不能写成什么样：不能偏离“{data.hook}”去写长期无关支线。
+        - 禁止问题 1：不能让主角长期被动挨打却没有新的筹码增长。
+        - 禁止问题 2：不能把卷末升级写成只有情绪，没有事实变化。
+
+        ## 初始化阶段默认强约束
+
+        - {serial_constraints['promise_rule']}
+        - {serial_constraints['escalation_rule']}
+        - {serial_constraints['continuity_rule']}
+        - {serial_constraints['audit_rule']}
         """
     )
 
 
 def render_setting_md(data: InitBookInput) -> str:
+    serial_constraints = build_serial_constraints(data)
     return dedent(
         f"""\
         # 世界设定
@@ -1797,19 +2367,28 @@ def render_setting_md(data: InitBookInput) -> str:
         ## 核心规则
 
         - 规则 1：主线始终服务于核心卖点“{data.hook}”
-        - 规则 2：关键世界规则待补充
-        - 规则 3：关键成长或冲突约束待补充
+        - 规则 2：主角每次获得明显收益，都应伴随代价、门槛或更高层敌意。
+        - 规则 3：能改变长期判断的设定必须可被复述成结构化事实。
+        - 规则 4：同一类世界规则一旦确认，后文不得无解释改写。
 
         ## 力量或冲突系统
 
-        - 力量来源：待补充
-        - 约束条件：待补充
-        - 成长路径：待补充
+        - 力量来源：围绕“{data.hook}”建立，可在后续补齐具体机制。
+        - 约束条件：收益不能无成本无限获取，细化待补充。
+        - 成长路径：从当前处境起步，经由阶段性冲突完成层级提升。
+
+        ## 冲突升级轴
+
+        - 第一层：先解决主角的生存、起步或第一次立足问题。
+        - 第二层：把个人冲突升级为资源争夺、阵营对抗或规则博弈。
+        - 第三层：让主角面对更高层级敌人、系统真相或世界性压力。
+        - 长篇要求：{serial_constraints['escalation_rule']}
 
         ## 高风险连续性事项
 
-        - 容易写崩的设定点：待补充
-        - 必须长期保持一致的规则：待补充
+        - 容易写崩的设定点：如果“{data.hook}”的收益规则忽强忽弱，整本书会失去可信度。
+        - 必须长期保持一致的规则：主角资源获取方式、敌我差距来源、世界基本惩罚机制。
+        - 初始化假设：暂未确认的世界细节可以留白，但不能和已定主线承诺打架。
         """
     )
 
@@ -1817,6 +2396,7 @@ def render_setting_md(data: InitBookInput) -> str:
 def render_style_rules_md(data: InitBookInput) -> str:
     tone = data.tone or PLACEHOLDER
     reference = data.reference or PLACEHOLDER
+    platform_profile = build_platform_guidelines(data.platform)
     return dedent(
         f"""\
         # 文风规则
@@ -1824,14 +2404,21 @@ def render_style_rules_md(data: InitBookInput) -> str:
         ## 目标风格
 
         - 目标气质：{tone}
-        - 节奏偏好：待补充
-        - 对话风格：待补充
+        - 节奏偏好：快进入、快推进、关键处停得住
+        - 对话风格：对白优先承担推进与施压，不只负责解释
 
         ## 平台适配要求
 
-        - 段落长度：适配 {data.platform}，默认偏短段
-        - 爽点密度：待补充
-        - 钩子类型偏好：待补充
+        - 段落长度：{platform_profile['paragraph_rule']}
+        - 爽点密度：每章至少要有一次明确推进或收益，不允许整章空转
+        - 钩子类型偏好：{platform_profile['hook_rule']}
+        - 对话使用原则：{platform_profile['dialogue_rule']}
+
+        ## 叙事镜头要求
+
+        - 默认采用贴近主角的近景视角，减少全知说明型长段落。
+        - 重要规则优先在冲突现场显现，不优先用纯解释段告知。
+        - 场景切换要服务节拍，不要为了“显得丰富”频繁跳镜头。
 
         ## 风格参照
 
@@ -1839,13 +2426,14 @@ def render_style_rules_md(data: InitBookInput) -> str:
 
         ## 禁用表达
 
-        - 禁用词：待补充
-        - 禁用句式：待补充
-        - 禁用套路：待补充
+        - 禁用词：极致、彻底、疯狂 等无信息增量副词需谨慎使用
+        - 禁用句式：连续解释世界观却没有动作推进的说明段
+        - 禁用套路：靠旁白宣布“很危险”“很震惊”代替真实场面
 
         ## 自检清单
 
-        - 需要重点搜索和清理的表达：待补充
+        - 需要重点搜索和清理的表达：模板化表情、机械过渡词、假高潮式章末收束
+        - 每章自检：是否真的推进了目标，是否留下了下一章承接理由
         """
     )
 
@@ -1861,31 +2449,48 @@ def render_protagonist_md(data: InitBookInput) -> str:
         - 年龄：待补充
         - 身份：待补充
         - 初始处境：围绕“{data.hook}”建立主线起点，细化待补充
+        - 初始缺口：主角眼下最缺什么，导致他必须进入主线，待补充
 
         ## 核心驱动力
 
         - 想要什么：待补充
         - 最怕什么：待补充
         - 最不能退让的底线：待补充
+        - 短期必须解决的问题：待补充
+
+        ## 长期人物弧线
+
+        - 这本书里主角会从什么状态成长到什么状态：待补充
+        - 这条成长线必须始终与“{data.hook}”绑定，而不是平行展开
+        - 每一卷结束时，主角都应获得可结构化记录的新位置、新能力或新筹码
 
         ## 能力与短板
 
         - 当前优势：待补充
         - 当前短板：待补充
         - 成长方向：待补充
+        - 成长代价：待补充
 
         ## 人设红线
 
-        - 绝不能出现的失真行为：待补充
+        - 绝不能出现的失真行为：不能为了推动剧情，突然违背已确认底线或智商水平
+        - 主角的爽点来源必须稳定：优先来自“{data.hook}”兑现，而不是旁人降智抬轿
 
         ## 关系起点
 
         - 重要初始关系：待补充
+        - 最先会牵动主线的关系：待补充
+
+        ## 首卷必须成立的读者印象
+
+        - 读者应该为什么持续追主角：待补充
+        - 读者不应该对主角产生什么反感：待补充
         """
     )
 
 
 def render_volume_outline_md(data: InitBookInput) -> str:
+    serial_constraints = build_serial_constraints(data)
     return dedent(
         f"""\
         # 第一卷纲要
@@ -1897,6 +2502,14 @@ def render_volume_outline_md(data: InitBookInput) -> str:
         ## 卷核心卖点
 
         - 本卷最核心的吸引力：{data.hook}
+        - 本卷必须兑现一次什么承诺：主角第一次把“{data.hook}”转化为可见战果或地位变化。
+
+        ## 卷级节奏要求
+
+        - 开卷前段：尽快让主角进入不能回头的主问题。
+        - 卷中阶段：让主角付出代价换来第一次真正扩张。
+        - 卷末阶段：完成阶段性胜利，并抛出更高一级问题。
+        - 连载约束：{serial_constraints['escalation_rule']}
 
         ## 主要阶段
 
@@ -1905,30 +2518,39 @@ def render_volume_outline_md(data: InitBookInput) -> str:
         - 目标：建立主角起点与核心冲突
         - 冲突：待补充
         - 结果：待补充
+        - 读者承诺：必须让读者看清“这本书以后主要爽在哪里”
 
         ### 阶段二
 
         - 目标：扩大主线冲突与角色关系
         - 冲突：待补充
         - 结果：待补充
+        - 读者承诺：必须给出第一次阶段性兑现，而不是一直预热
 
         ### 阶段三
 
         - 目标：完成第一卷收束并抛出后续钩子
         - 冲突：待补充
         - 结果：待补充
+        - 读者承诺：卷末必须同时提供胜利感和继续追更理由
 
         ## 卷末状态
 
         - 主角会到达什么状态：待补充
         - 世界格局会发生什么变化：待补充
         - 给下一卷留下什么钩子：待补充
+
+        ## 需要后续补齐的关键空白
+
+        - 第一卷核心反派或对手结构
+        - 第一卷中段最大反转
+        - 第一卷卷末必须回收的承诺
         """
     )
 
 
 def render_characters_yaml(data: InitBookInput) -> str:
-    capability = f"围绕“{data.hook}”展开，细化待补充"
+    capability = f"主角核心能力或筹码将围绕“{data.hook}”展开，具体细节待补充"
     return dedent(
         f"""\
         - id: protagonist
@@ -1941,6 +2563,7 @@ def render_characters_yaml(data: InitBookInput) -> str:
           latest_chapter: 0
           open_threads:
             - 主线起点待补充
+            - 第一次阶段性胜利要通过什么方式拿到，待补充
         """
     )
 
@@ -1954,7 +2577,7 @@ def render_factions_yaml() -> str:
           members_summary: 初始仅主角
           territory: 待补充
           resources:
-            - 待补充
+            - 主角当前可调动资源待补充
           relationship_to_protagonist: self
           latest_change_chapter: 0
         """
@@ -1968,9 +2591,11 @@ def render_power_state_yaml(data: InitBookInput) -> str:
           baseline_power: 待补充
           current_constraints:
             - 围绕“{data.hook}”建立能力与限制，细化待补充
+            - 在未明确规则前，不允许把主角收益写成无代价无限增长
 
         systems_or_rules:
-          - 待补充
+          - “{data.hook}”相关系统或规则待补充
+          - 长期有效的世界硬规则待补充
 
         key_items:
           - 待补充
@@ -2028,9 +2653,17 @@ def render_init_summary_md(
         - 项目代称：{codename}
         - 初始化阶段只建立第一卷最小骨架，不扩写完整长篇大纲
         - 初始阵营使用 `self` 作为主角阵营占位
+        - 默认按 {infer_serial_mode(data.length)} 处理，要求后续每卷都提供实际升级
         - 未被用户明确提供的规则与设定，统一保留为“待补充”
 
-        ## 四、仍待确认或补充的内容
+        ## 四、当前已写入的强约束
+
+        - 主线必须持续服务核心卖点“{data.hook}”
+        - 长篇连载中，主角每卷都要获得可结构化记录的新筹码
+        - 影响连续性的事实必须回写 state，不能只停留在正文表达
+        - 平台适配默认已写入 `style_rules.md`，后续应按实际平台再细化
+
+        ## 五、仍待确认或补充的内容
 
         - 世界背景细节
         - 力量或冲突系统
@@ -2038,9 +2671,10 @@ def render_init_summary_md(
         - 第一卷详细冲突与阶段结果
         - 文风禁用项和平台适配细节
 
-        ## 五、下一步建议
+        ## 六、下一步建议
 
         - 先审核这次初始化结果
+        - 优先补齐会影响连续性的硬信息，而不是追求一次补完整本大纲
         - 修正你不认同的最小假设
         - 确认后再进入第 1 章的 `plan-chapter`
         """

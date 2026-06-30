@@ -40,12 +40,12 @@
 每一章固定按以下顺序执行：
 
 1. `plan-chapter`
-2. 人工审核章节计划
+2. `record-review --stage plan --decision approved`
 3. `prompt-chapter`
 4. `draft-chapter`（可选）
 5. `humanize-chapter`
 6. `review-draft`
-7. 人工审核正文
+7. 人工审核正文并落文件：`record-review --stage final --decision approved`
 8. `sync-state`
 9. `render-artifacts`
 
@@ -94,6 +94,12 @@
 
 通过前不得进入正文写作。
 
+审核通过不是口头约定，必须落成文件。
+
+建议约定：
+
+- `book/drafts/chapter-XXX/human-plan-review.yaml`
+
 章节计划至少需要包含：
 
 - 本章目标
@@ -115,6 +121,12 @@
 
 通过前不得更新 state。
 
+审核通过不是口头约定，必须落成文件。
+
+建议约定：
+
+- `book/drafts/chapter-XXX/human-final-review.yaml`
+
 正文审核通过后，agent 才能：
 
 - 写入定稿
@@ -130,6 +142,7 @@
 建议约定：
 
 - 人审通过版本落为 `book/drafts/chapter-XXX/final.md`
+- `sync-state` 首次执行时，如果缺少 `state-update.yaml`，脚本会先生成脚手架并停止
 - 之后再执行 `sync-state`
 
 ## 四、State 的使用原则

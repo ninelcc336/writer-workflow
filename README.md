@@ -44,12 +44,12 @@
 每章固定流程：
 
 1. 章节计划
-2. 人审计划
+2. 人审计划并记录 `record-review --stage plan --decision approved`
 3. 正文骨架 / 提示词
 4. 正文初稿（可选）
 5. 去 AI 味修订
 6. 正文审查报告
-7. 人审正文
+7. 人审正文并记录 `record-review --stage final --decision approved`
 8. 状态同步
 9. 汇总渲染
 
@@ -75,6 +75,7 @@
 - `init-book`
 - `init-state`
 - `plan-chapter`
+- `record-review`
 - `prompt-chapter`
 - `draft-chapter`
 - `humanize-chapter`

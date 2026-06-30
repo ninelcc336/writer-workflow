@@ -4,7 +4,8 @@
   status: alive
   current_location: 待补充
   relationship_to_protagonist: self
-  capability_summary: 待补充
+  capability_summary: 主角的核心能力、规则优势或关键筹码，必须和主卖点绑定
   latest_chapter: 0
   open_threads:
-    - 待补充
+    - 主角当前最大的生存或处境问题
+    - 第一卷必须兑现的首次阶段性胜利

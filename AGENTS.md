@@ -70,12 +70,12 @@
 标准顺序：
 
 1. `plan-chapter`
-2. 等待人类审核章节计划
+2. 等待人类审核章节计划，并执行 `record-review --stage plan --decision approved`
 3. `prompt-chapter`
 4. `draft-chapter`
 5. `humanize-chapter`
 6. `review-draft`
-7. 等待人类审核正文
+7. 等待人类审核正文，并执行 `record-review --stage final --decision approved`
 8. `sync-state`
 9. `render-artifacts`
 
@@ -87,6 +87,7 @@
 
 - 不得写正式正文
 - 不得提前更新 state
+- 不得跳过审核记录文件
 
 ### 审核点二：正文成稿
 
@@ -95,6 +96,7 @@
 - 不得修改 `book/state/*.yaml`
 - 不得覆盖 `book/drafts/.../final.md`
 - 不得生成下一章正式提示包
+- 不得跳过 `human-final-review.yaml`
 
 ## 6. 信息源优先级
 

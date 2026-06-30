@@ -1,0 +1,33 @@
+# record-review
+
+状态：可执行流程说明，已最小脚本化
+
+执行入口：
+
+- 当人类已经审核完章节计划或正文定稿时运行
+- 详细规则见 `docs/workflow.md`、`docs/review-checklist.md`
+
+## 步骤清单
+
+1. 指明当前审核的是 `plan` 还是 `final`
+2. 记录审核结论：`approved / changes_requested / rejected`
+3. 可选记录审核人、备注、对应文件
+4. 落成机器可判断的审核记录文件
+
+## 最小输入
+
+- `book/drafts/chapter-XXX/`
+- 当前章节号
+- 审核阶段
+- 审核结论
+
+## 推荐输出
+
+- `book/drafts/chapter-XXX/human-plan-review.yaml`
+- `book/drafts/chapter-XXX/human-final-review.yaml`
+- `book/artifacts/reports/chapter-XXX-*-human-review.md`
+
+## 强约束
+
+- 没有 `approved` 的计划审核记录，不得进入正文阶段
+- 没有 `approved` 的正文审核记录，不得执行 `sync-state`

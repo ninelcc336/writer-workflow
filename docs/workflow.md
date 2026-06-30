@@ -30,6 +30,11 @@
 - `book/state/power_state.yaml`
 - `book/state/chapter_index.yaml`
 
+注意：
+
+- 模板仓库可以预置这些文件的示例形态
+- 但只要内容仍是 `待补充` 或模板默认值，就不能视为初始化完成
+
 ## 二、章节阶段
 
 每一章固定按以下顺序执行：

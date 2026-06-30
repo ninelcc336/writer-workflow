@@ -24,6 +24,10 @@
 - `book/canon/setting.md` 不存在
 - `book/state/characters.yaml` 不存在
 
+补充说明：
+
+- 即使 `book/state/*.yaml` 已经存在，只要它们仍是模板占位内容，也仍然属于初始化流程范围
+
 ## 二、执行原则
 
 `init-book` 要遵守 4 条原则：
@@ -165,6 +169,8 @@
 - `foreshadows.yaml` 可为空列表
 - `power_state.yaml` 至少要有主角基础状态和核心规则占位
 - `chapter_index.yaml` 初始化阶段可为空列表
+
+如果模板仓库中已预置这些文件，执行 `init-book` 时应覆盖占位内容，而不是把占位内容当成完成状态。
 
 建议使用的模板来源：
 

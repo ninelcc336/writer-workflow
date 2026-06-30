@@ -1,0 +1,10 @@
+- id: protagonist
+  name: 待补充
+  faction: self
+  status: alive
+  current_location: 待补充
+  relationship_to_protagonist: self
+  capability_summary: 待补充
+  latest_chapter: 0
+  open_threads:
+    - 待补充

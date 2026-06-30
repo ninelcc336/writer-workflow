@@ -47,6 +47,15 @@
 6. `sync-state`
 7. `render-artifacts`
 
+`plan-chapter` 的详细执行规则见：
+
+- `docs/plan-chapter.md`
+
+文件职责区分：
+
+- `chapter_brief` 是章节输入简报，通常由人提供或先行整理
+- `chapter_plan` 是 agent 基于 brief、canon、state 产出的施工图
+
 ## 三、两个审核节点
 
 ### 章节计划审核
@@ -61,6 +70,10 @@
 - 必写节点
 - 禁忌和风险点
 - 章末钩子或冷收束说明
+
+建议直接使用模板：
+
+- `templates/chapter_plan.template.md`
 
 ### 正文审核
 

@@ -1,16 +1,37 @@
 # plan-chapter
 
-状态：命令契约占位，尚未脚本化
+状态：可执行流程说明，尚未脚本化
 
-用途：
+执行入口：
 
-- 基于 canon、state 和上章上下文生成本章计划
+- 当一本书已完成初始化，且用户要求规划某章时运行
+- 详细规则见 `docs/plan-chapter.md`
 
-输出至少应包含：
+## 步骤清单
 
-- 本章目标
-- 字数预算
-- 3 到 5 个节拍
-- 必写节点
-- 风险与禁忌
-- 章末落点
+1. 读取 canon、state、当前章 brief、上一章上下文
+2. 提取本章必须处理的目标、伏笔和约束
+3. 拆成 3 到 5 个节拍
+4. 分配字数预算
+5. 列出必写节点
+6. 列出风险与禁忌
+7. 明确章末落点
+8. 生成计划文件和计划检查报告
+
+## 最小输入
+
+- `book/canon/` 基础文件
+- `book/state/*.yaml`
+- 当前章 brief
+- 上一章 final 或上一章状态收束
+
+## 推荐输出
+
+- `book/drafts/chapter-XXX/plan.md`
+- `book/artifacts/reports/chapter-XXX-plan-check.md`
+
+## 强约束
+
+- 不得直接写正文
+- 不得提前更新 state
+- 未经人审不得进入 `draft-chapter`

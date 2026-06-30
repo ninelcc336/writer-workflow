@@ -73,5 +73,6 @@
 1. `AGENTS.md`
 2. `docs/workflow.md`
 3. `docs/init-book.md`
-4. `docs/review-checklist.md`
-5. `docs/superpowers/specs/2026-06-30-writer-system-design.md`
+4. `docs/plan-chapter.md`
+5. `docs/review-checklist.md`
+6. `docs/superpowers/specs/2026-06-30-writer-system-design.md`

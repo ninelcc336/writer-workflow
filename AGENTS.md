@@ -19,9 +19,10 @@
 1. `README.md`
 2. `docs/workflow.md`
 3. `docs/init-book.md`
-4. `docs/review-checklist.md`
-5. `book/canon/`
-6. `book/state/`
+4. `docs/plan-chapter.md`
+5. `docs/review-checklist.md`
+6. `book/canon/`
+7. `book/state/`
 
 如果 `book/canon/` 或 `book/state/` 尚未建立完整基础文件，必须先进入初始化流程。
 
@@ -107,6 +108,7 @@
 - 读取 canon 和 state
 - 输出章节计划
 - 输出必写节点、字数预算、风险点
+- 输出章末落点和计划检查结果
 
 ### Drafter
 

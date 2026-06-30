@@ -1,11 +1,13 @@
 # init-book
 
-状态：可执行流程说明，尚未脚本化
+状态：可执行流程说明，已部分脚本化
 
 执行入口：
 
 - 当仓库处于空白新书状态时运行
 - 详细规则见 `docs/init-book.md`
+- Windows 包装命令：`scripts/init-book.cmd`
+- Python 入口：`python scripts/workflow_cli.py init-book ...`
 
 ## 步骤清单
 

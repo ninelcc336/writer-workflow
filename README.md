@@ -14,7 +14,7 @@
 - `docs/`：给人和 agent 的流程文档
 - `templates/`：新书初始化时要复制和填写的模板
 - `schemas/`：结构化状态文件规范
-- `scripts/`：命令契约占位文件
+- `scripts/`：命令入口与脚本实现
 - `book/`：fork 后真正的书稿工作区
 
 其中 `templates/` 现在同时包含：
@@ -47,9 +47,10 @@
 2. 人审计划
 3. 正文初稿
 4. 去 AI 味修订
-5. 人审正文
-6. 状态同步
-7. 汇总渲染
+5. 正文审查报告
+6. 人审正文
+7. 状态同步
+8. 汇总渲染
 
 ## 当前版本定位
 
@@ -65,6 +66,33 @@
 - 模型 API 自动写作脚本
 - 图形界面
 - 多书集中管理
+
+## 当前可执行命令
+
+当前已经有真实脚本实现的是：
+
+- `init-book`
+- `init-state`
+- `plan-chapter`
+- `draft-chapter`
+- `humanize-chapter`
+- `review-draft`
+- `sync-state`
+- `render-artifacts`
+
+在 Windows / PowerShell 下可直接调用：
+
+```powershell
+.\scripts\init-book.cmd --title "书名" --genre "题材" --platform "平台" --hook "核心卖点" --protagonist "主角" --length "100万字"
+```
+
+这些命令当前都属于“最小可运行实现”：
+
+- 能创建、读取、更新工作流文件
+- 能串起完整主流程
+- 还不等于高质量智能创作引擎
+
+也就是说，它们现在更像“可靠的流程骨架”，不是“强内容生成器”。
 
 ## 从哪里开始看
 

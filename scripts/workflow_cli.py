@@ -574,7 +574,7 @@ def run_review_draft(args: argparse.Namespace) -> int:
         markers = extract_node_markers(must_node)
         if markers:
             hit_count = sum(1 for marker in markers if marker in text)
-            if hit_count < max(1, min(2, len(markers))):
+            if hit_count < required_marker_hits(must_node, markers):
                 warnings.append(f"必写节点可能未充分落地：{must_node}")
         else:
             keyword = meaningful_fragment(must_node)
@@ -1617,6 +1617,7 @@ def build_scene_blocks_from_keywords(
         ]
         if budget >= 700:
             blocks.append(f"他扶起电动车的时候，手指还在发抖，可脚下却像忽然多了一层弹劲。以前要绕的车流缝隙，这一秒全像提前给他让出了路。")
+            blocks.append(f"风声贴着耳边刮过去，连刹车声都被拖成一条细线。{protagonist_name}第一次真切意识到，自己身上发生的不是错觉，而是某种正在把他往前硬拽的变化。")
         return blocks
     if any(keyword in hint for keyword in ["送到", "收益", "新能力"]):
         blocks = [
@@ -1626,6 +1627,7 @@ def build_scene_blocks_from_keywords(
         ]
         if budget >= 650:
             blocks.append(f"回身下楼时，他甚至生出一点荒唐的错觉，仿佛这座城市原本压在骑手身上的重量，突然被人偷偷拿走了一半。")
+            blocks.append(f"可这种轻松只持续了短短几秒。等理智重新追上来，他第一反应就是这份速度来得太突然，也太不像普通人该有的东西。")
         return blocks
     if any(keyword in hint for keyword in ["异常", "盯上", "麻烦", "掉包"]):
         hook = f"{protagonist_name}站在空荡荡的走廊口，后背的冷汗一下就冒出来了。钱是到账了，可真正的麻烦这才露头。有人已经盯上他，而且对方显然不打算给他解释的机会。"
@@ -1638,6 +1640,7 @@ def build_scene_blocks_from_keywords(
         ]
         if budget >= 450:
             blocks.append(f"{protagonist_name}下意识攥紧手机，第一反应不是报警，而是这单背后的人为什么会知道他的号码，又为什么笃定他一定会怕。")
+            blocks.append(f"他猛地回头去看那扇已经关上的门，门后却安静得像什么都没发生过。越是这样，越说明这单从一开始就不是单纯的跑腿。")
         return blocks
     if any(keyword in hint for keyword in ["房贷", "跑单", "现实压力", "外卖"]):
         blocks = [
@@ -2274,6 +2277,16 @@ def extract_node_markers(text: str) -> list[str]:
         if len(hits) >= 2:
             markers.extend(hits[:2])
     return deduplicate_preserve_order(markers)
+
+
+def required_marker_hits(must_node: str, markers: list[str]) -> int:
+    if any(keyword in must_node for keyword in ["房贷", "被裁", "送外卖", "现实处境"]):
+        return 1
+    if any(keyword in must_node for keyword in ["车祸", "觉醒", "配送途中", "完成本单"]):
+        return 1
+    if any(keyword in must_node for keyword in ["送达", "货物", "掉包", "隐患"]):
+        return 1
+    return max(1, min(2, len(markers)))
 
 
 def count_cjk_chars(text: str) -> int:

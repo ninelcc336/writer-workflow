@@ -571,9 +571,15 @@ def run_review_draft(args: argparse.Namespace) -> int:
         blockers.append("正文主体缺少连续叙事场景，当前更像提示词说明而不是小说正文。")
 
     for must_node in plan_data.get("must_nodes", []):
-        keyword = meaningful_fragment(must_node)
-        if keyword and keyword not in text:
-            warnings.append(f"必写节点可能未充分落地：{must_node}")
+        markers = extract_node_markers(must_node)
+        if markers:
+            hit_count = sum(1 for marker in markers if marker in text)
+            if hit_count < max(1, min(2, len(markers))):
+                warnings.append(f"必写节点可能未充分落地：{must_node}")
+        else:
+            keyword = meaningful_fragment(must_node)
+            if keyword and keyword not in text:
+                warnings.append(f"必写节点可能未充分落地：{must_node}")
 
     if plan_data.get("ending_type") not in text:
         warnings.append(f"章末落点未明显体现计划中的类型：{plan_data.get('ending_type')}")
@@ -1445,6 +1451,7 @@ def render_offline_beat_scene(
         landing=landing,
         is_first=is_first,
         is_last=is_last,
+        budget=int(beat.get("budget", 0)),
     )
     if scene_blocks:
         paragraphs: list[str] = []
@@ -1590,41 +1597,57 @@ def build_scene_blocks_from_keywords(
     landing: str,
     is_first: bool,
     is_last: bool,
+    budget: int,
 ) -> list[str]:
     hint = scene_hint
     if any(keyword in hint for keyword in ["急送", "接单", "高价"]):
-        return [
+        blocks = [
             f"就在{protagonist_name}准备接下一单普通夜宵的时候，骑手软件忽然弹出一条急送单。价格高得离谱，配送时限却短得像是故意不让人活。",
             f"更怪的是，这单没有正常商家备注，取货地址卡在一条老旧巷子里，送达点却在城西一栋快废弃的写字楼。正常骑手看到这种单，多半第一反应就是绕着走。",
             f"{protagonist_name}也想关掉界面，可他盯着那串配送费看了三秒，脑子里先跳出来的不是风险，而是这个月还差的房贷尾巴。手指只犹豫了一下，单子就被他抢了下来。局面也从这一秒开始，彻底朝着“{landing or '更难回头'}”的方向滑过去。",
         ]
+        if budget >= 650:
+            blocks.append(f"他顺手点开取货详情，里面只有一句模糊备注：本人不接电话，到了直接上楼。越是这种说不清来路的单子，越像是专门给缺钱的人下的套。")
+        return blocks
     if any(keyword in hint for keyword in ["车祸", "觉醒", "超时"]):
-        return [
+        blocks = [
             f"赶往送达点的路上，红灯刚跳黄，侧面一辆面包车就像看不见人一样猛拐过来。{protagonist_name}只来得及骂半句，整个人连车带包一起飞了出去。",
             f"柏油路蹭得他手臂火辣辣地疼，脑子也嗡的一下发白。可更要命的是，屏幕上的倒计时还在往下跳，包裹还滚在不远处，像是在提醒他这单一旦超时，今晚就白折腾了。",
             f"就在他咬牙爬起来那一瞬，胸口像是被什么东西猛地顶开。呼吸忽然顺了，腿上的酸胀像被一把扯断，连雨点落下来的速度都像慢了一拍。{protagonist_name}没空理解那是什么，他只知道自己必须先把包捡回来，然后继续往前冲。",
         ]
+        if budget >= 700:
+            blocks.append(f"他扶起电动车的时候，手指还在发抖，可脚下却像忽然多了一层弹劲。以前要绕的车流缝隙，这一秒全像提前给他让出了路。")
+        return blocks
     if any(keyword in hint for keyword in ["送到", "收益", "新能力"]):
-        return [
+        blocks = [
             f"包裹重新回到手里后，{protagonist_name}第一次知道什么叫脚底发轻。楼梯一层层往上扑，他却像把平时那些喘不过气的拐角全都踩平了。",
             f"平时要停两次的长楼道，这回他一口气冲到顶。门开的时候，收货人先是盯了他一眼，像没想到这种时间还真有人能把东西送到，随后才伸手把包裹接过去。",
             f"到账提示响起来的那一刻，{protagonist_name}心里先是一松，紧接着又猛地一紧。钱是真的，速度也是真的，可越是这样，他越能感觉到自己已经踩进了一个不该碰的局里。",
         ]
+        if budget >= 650:
+            blocks.append(f"回身下楼时，他甚至生出一点荒唐的错觉，仿佛这座城市原本压在骑手身上的重量，突然被人偷偷拿走了一半。")
+        return blocks
     if any(keyword in hint for keyword in ["异常", "盯上", "麻烦", "掉包"]):
         hook = f"{protagonist_name}站在空荡荡的走廊口，后背的冷汗一下就冒出来了。钱是到账了，可真正的麻烦这才露头。有人已经盯上他，而且对方显然不打算给他解释的机会。"
         if is_last:
             hook += f"事情也顺着“{landing or '新的危险'}”追到了他脚边。"
-        return [
+        blocks = [
             f"电梯门刚合上，{protagonist_name}就察觉到不对。刚才那人接包裹时动作太快，像是在确认什么，又像是在掩饰什么，连一句正常的“辛苦了”都没说。",
             f"更诡异的是，他低头再看订单页面，那条急送记录竟然开始异常闪烁，像是有人在后台强行改动数据。下一秒，一条陌生短信跳了出来，内容只有一句话：东西没在你手里，最好拿下一单证明。",
             hook,
         ]
+        if budget >= 450:
+            blocks.append(f"{protagonist_name}下意识攥紧手机，第一反应不是报警，而是这单背后的人为什么会知道他的号码，又为什么笃定他一定会怕。")
+        return blocks
     if any(keyword in hint for keyword in ["房贷", "跑单", "现实压力", "外卖"]):
-        return [
+        blocks = [
             f"夜里十一点多，{protagonist_name}蹲在商场后门啃冷掉的手抓饼，手机里那条房贷扣款提醒像根鱼刺，一直卡在喉咙口。",
             f"他白天刚被站长阴阳怪气，说这个月再掉单就别想拿满勤。可他比谁都清楚，自己现在最丢不起的不是面子，是那套还在还贷的房子。一旦现金流断了，父母留下来的最后一点东西都得跟着一起断。",
             f"所以哪怕腿已经酸得发涨，雨也开始往脖子里灌，他还是得把电动车重新扶正。对别人来说，送外卖只是份活；对他来说，这是眼下唯一还能把日子往明天拖一拖的办法。",
         ]
+        if budget >= 500:
+            blocks.append(f"他已经记不清这是第几天跑到半夜了，只记得每次点开银行账单，心里都会先算一遍还能撑多久。这个城市很大，可留给他转身的余地并不大。")
+        return blocks
     return []
 
 
@@ -2234,6 +2257,23 @@ def split_long_lines(text: str, limit: int = 110) -> str:
 def meaningful_fragment(text: str) -> str:
     cleaned = re.sub(r"[：:，。、“”\"'（）()\-\s]", "", text)
     return cleaned[:8]
+
+
+def extract_node_markers(text: str) -> list[str]:
+    text = strip_prompt_leakage(text)
+    markers: list[str] = []
+    keyword_groups = [
+        ["房贷", "被裁", "送外卖", "现实处境"],
+        ["高价", "急送", "反常", "诱人", "拒绝"],
+        ["车祸", "觉醒", "配送途中", "完成本单"],
+        ["送达", "货物", "掉包", "隐患"],
+        ["地下", "组织", "盯上", "自证"],
+    ]
+    for group in keyword_groups:
+        hits = [item for item in group if item in text]
+        if len(hits) >= 2:
+            markers.extend(hits[:2])
+    return deduplicate_preserve_order(markers)
 
 
 def count_cjk_chars(text: str) -> int:

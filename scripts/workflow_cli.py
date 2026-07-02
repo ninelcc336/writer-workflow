@@ -470,50 +470,20 @@ def run_draft_chapter(args: argparse.Namespace) -> int:
     key_foreshadows = prompt_data.get("key_foreshadows") or []
     power_snapshot = prompt_data.get("power_snapshot") or []
     must_nodes = prompt_data.get("must_nodes") or []
-    continuity_hints = build_draft_continuity_hints(prompt_data)
-
-    draft_parts = [f"# 第{args.chapter}章：{title}", ""]
-    if args.chapter > 1 and previous_context:
-        draft_parts.append(f"{previous_context}。余波还没散干净，{protagonist_name}已经被推到了新的局面前。")
-    else:
-        draft_parts.append(f"{protagonist_name}知道，今晚真正不能错过的，不是表面的输赢，而是“{goal}”。")
-    draft_parts.append("")
-    if continuity_hints:
-        draft_parts.append(f"眼下最直接的掣肘有三个：{'; '.join(continuity_hints[:3])}。")
-        draft_parts.append("")
-
-    for index, beat in enumerate(beats, start=1):
-        scene_seed = beat.get("scene_seed") or beat["key_action"]
-        conflict_focus = beat.get("conflict_focus") or beat["function"]
-        taboo = beat.get("taboo") or "不要把本节写成空转说明。"
-        node_hint = must_nodes[index - 1] if index - 1 < len(must_nodes) else ""
-        foreshadow_hint = key_foreshadows[min(index - 1, len(key_foreshadows) - 1)] if key_foreshadows else ""
-        power_hint = power_snapshot[min(index - 1, len(power_snapshot) - 1)] if power_snapshot else ""
-        style_hint = style_rules[min(index - 1, len(style_rules) - 1)] if style_rules else "保持短段、快推进。"
-
-        draft_parts.append(
-            f"{scene_seed}。{protagonist_name}在这一段里的直接目标，是{beat['key_action']}。"
-        )
-        draft_parts.append("")
-        draft_parts.append(
-            f"这一节必须承担“{beat['function']}”的作用，所以冲突焦点不能散，要明确压在{conflict_focus}上。"
-            f"{style_hint}"
-        )
-        draft_parts.append("")
-        supporting_bits = [item for item in [node_hint, foreshadow_hint, power_hint] if is_actionable_context(item)]
-        if supporting_bits:
-            draft_parts.append(
-                f"{protagonist_name}每推进一步，都要让这些信息真正落到场面里：{'；'.join(supporting_bits)}。"
-            )
-            draft_parts.append("")
-        draft_parts.append(
-            f"只有当局面被推到“{beat['landing']}”，这一节才算成立。{taboo}"
-        )
-        draft_parts.append("")
-
-    draft_parts.append(f"章末必须落在“{ending_type}”上。")
-    draft_parts.append(f"具体收束方向：{ending_hint}。")
-    draft_text = "\n".join(draft_parts).strip() + "\n"
+    draft_text = render_offline_draft_markdown(
+        chapter=args.chapter,
+        title=title,
+        protagonist_name=protagonist_name,
+        goal=goal,
+        previous_context=previous_context,
+        beats=beats,
+        must_nodes=must_nodes,
+        style_rules=style_rules,
+        key_foreshadows=key_foreshadows,
+        power_snapshot=power_snapshot,
+        ending_type=ending_type,
+        ending_hint=ending_hint,
+    )
 
     draft_path = chapter_dir / "draft-v1.md"
     draft_data_path = chapter_dir / "draft-v1.data.yaml"
@@ -546,13 +516,11 @@ def run_humanize_chapter(args: argparse.Namespace) -> int:
         return 1
 
     text = source_path.read_text(encoding="utf-8")
-    text = text.replace("这一节的功能是", "")
-    text = text.replace("第", "第")
+    text = clean_prompt_leakage(text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
-    text = text.replace("必须朝着“", "朝着“")
     text = split_long_lines(text)
-    text = text.replace("本章结尾应落在：", "章末落点：")
+    text = normalize_dialogue_spacing(text)
     text = text.strip() + "\n"
 
     target_path = chapter_dir / "draft-v2-humanized.md"
@@ -596,6 +564,11 @@ def run_review_draft(args: argparse.Namespace) -> int:
         blockers.append("正文中仍存在“待补充”，说明草稿尚未完成。")
     if not text.lstrip().startswith("# 第"):
         blockers.append("正文缺少明确章节标题。")
+    leakage_markers = detect_prompt_leakage_markers(text)
+    if leakage_markers:
+        blockers.append(f"正文仍残留提示词/元数据结构：{', '.join(leakage_markers[:6])}")
+    if not looks_like_narrative_prose(text):
+        blockers.append("正文主体缺少连续叙事场景，当前更像提示词说明而不是小说正文。")
 
     for must_node in plan_data.get("must_nodes", []):
         keyword = meaningful_fragment(must_node)
@@ -619,7 +592,9 @@ def run_review_draft(args: argparse.Namespace) -> int:
     if ai_markers:
         warnings.append(f"检测到可能的模板化表达：{', '.join(ai_markers[:5])}")
 
-    if not blockers and not warnings:
+    if blockers:
+        notes.append("当前草稿存在结构性问题，需先修成正文形态，再谈文风和节奏优化。")
+    elif not warnings:
         notes.append("结构上无明显阻塞项，可以进入人审。")
     else:
         notes.append("建议先根据 Blocker / Warning 处理后再提交正式人审。")
@@ -1390,6 +1365,269 @@ def build_draft_continuity_hints(prompt_data: dict) -> list[str]:
     return hints
 
 
+def render_offline_draft_markdown(
+    *,
+    chapter: int,
+    title: str,
+    protagonist_name: str,
+    goal: str,
+    previous_context: str,
+    beats: list[dict],
+    must_nodes: list[str],
+    style_rules: list[str],
+    key_foreshadows: list[str],
+    power_snapshot: list[str],
+    ending_type: str,
+    ending_hint: str,
+) -> str:
+    sections = [f"# 第{chapter}章：{title}", ""]
+    opening = build_opening_paragraph(chapter=chapter, protagonist_name=protagonist_name, goal=goal, previous_context=previous_context)
+    sections.extend(opening)
+
+    for index, beat in enumerate(beats, start=1):
+        node_hint = must_nodes[index - 1] if index - 1 < len(must_nodes) else ""
+        foreshadow_hint = key_foreshadows[min(index - 1, len(key_foreshadows) - 1)] if key_foreshadows else ""
+        power_hint = power_snapshot[min(index - 1, len(power_snapshot) - 1)] if power_snapshot else ""
+        beat_text = render_offline_beat_scene(
+            protagonist_name=protagonist_name,
+            beat=beat,
+            node_hint=node_hint,
+            foreshadow_hint=foreshadow_hint,
+            power_hint=power_hint,
+            style_rules=style_rules,
+            is_first=index == 1,
+            is_last=index == len(beats),
+        )
+        sections.extend(beat_text)
+
+    sections.append(build_ending_echo(protagonist_name=protagonist_name, ending_type=ending_type, ending_hint=ending_hint))
+    return "\n".join(sections).strip() + "\n"
+
+
+def build_opening_paragraph(*, chapter: int, protagonist_name: str, goal: str, previous_context: str) -> list[str]:
+    if chapter > 1 and is_actionable_context(previous_context):
+        return [
+            previous_context.rstrip("。") + "。",
+            "",
+            f"{protagonist_name}还没来得及把上一章的余波理顺，新的麻烦已经顶到了眼前。",
+            "",
+        ]
+    return [
+        f"{protagonist_name}今晚最怕的不是差评，也不是淋雨。",
+        "",
+        f"他真正怕的是再晚一点，银行卡里那点可怜的余额就撑不住房贷，而他连继续硬扛的资格都没有。目标只有一个：{goal.rstrip('。')}。",
+        "",
+    ]
+
+
+def render_offline_beat_scene(
+    *,
+    protagonist_name: str,
+    beat: dict,
+    node_hint: str,
+    foreshadow_hint: str,
+    power_hint: str,
+    style_rules: list[str],
+    is_first: bool,
+    is_last: bool,
+) -> list[str]:
+    seed = strip_prompt_scaffold(beat.get("scene_seed") or beat.get("key_action") or "")
+    landing = strip_prompt_scaffold(beat.get("landing") or "")
+    beat_name = strip_prompt_scaffold(beat.get("name") or "本节")
+    scene_hint = " ".join(
+        item
+        for item in [seed, beat_name, strip_prompt_leakage(node_hint), strip_prompt_leakage(foreshadow_hint)]
+        if is_actionable_context(item)
+    )
+    scene_blocks = build_scene_blocks_from_keywords(
+        protagonist_name=protagonist_name,
+        scene_hint=scene_hint,
+        landing=landing,
+        is_first=is_first,
+        is_last=is_last,
+    )
+    if scene_blocks:
+        paragraphs: list[str] = []
+        for block in scene_blocks:
+            paragraphs.append(block)
+            paragraphs.append("")
+        return paragraphs
+
+    fragments = extract_story_fragments([node_hint, foreshadow_hint, power_hint])
+    lead = f"{beat_name}刚露头，{protagonist_name}就知道今晚不会平顺。"
+    fallback = [
+        lead,
+        "",
+        f"{protagonist_name}没有空站着分析，只能先动起来，把“{seed or beat_name}”变成眼前的实际麻烦。{fragments[0] if fragments else ''}".strip(),
+        "",
+        f"等他把这一步扛过去，真正等着他的，还是“{landing or '更难回头'}”背后那层更深的代价。",
+        "",
+    ]
+    return fallback
+
+
+def build_ending_echo(*, protagonist_name: str, ending_type: str, ending_hint: str) -> str:
+    if ending_type == "钩子推进":
+        return f"{protagonist_name}抬头的时候，已经有人先一步盯上了他。{ending_hint.rstrip('。')}。"
+    return f"{protagonist_name}知道，这一章落下去以后，下一步只会更难。{ending_hint.rstrip('。')}。"
+
+
+def strip_prompt_scaffold(text: str) -> str:
+    if not is_actionable_context(text):
+        return ""
+    cleaned = str(text)
+    for marker in ["本节功能", "必须发生", "冲突焦点", "结果落点", "不要写成", "场景种子"]:
+        cleaned = cleaned.replace(marker, "")
+    cleaned = cleaned.replace("：", " ").replace("=", " ")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" 。；;，,")
+    return cleaned
+
+
+def extract_story_fragments(items: list[str]) -> list[str]:
+    fragments: list[str] = []
+    for item in items:
+        if not is_actionable_context(item):
+            continue
+        cleaned = strip_prompt_leakage(str(item))
+        if cleaned and cleaned not in fragments:
+            fragments.append(cleaned)
+    return fragments[:3]
+
+
+def strip_prompt_leakage(text: str) -> str:
+    cleaned = str(text)
+    replacements = [
+        "当前没有必须推进的结构化伏笔，若正文新增伏笔，后续必须补回 state。",
+        "人物约束：",
+        "势力约束：",
+        "资源约束：",
+        "伏笔约束：",
+        "目标气质：",
+        "节奏偏好：",
+        "对话风格：",
+        "段落长度：",
+        "钩子类型偏好：",
+        "主角基础战力：",
+        "主角当前限制：",
+        "key_items：",
+        "base_or_assets：",
+    ]
+    for item in replacements:
+        cleaned = cleaned.replace(item, "")
+    cleaned = cleaned.replace("状态=", "").replace("位置=", "").replace("关系=", "").replace("作用/能力=", "")
+    cleaned = cleaned.replace("当前悬而未决=", "")
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip(" ；;，,。")
+
+
+def clean_prompt_leakage(text: str) -> str:
+    lines = text.splitlines()
+    cleaned_lines: list[str] = []
+    forbidden = (
+        "这一节必须承担",
+        "冲突焦点",
+        "不要写成",
+        "本章核心目标",
+        "目标气质：",
+        "key_items：",
+        "主角当前限制：",
+        "状态=",
+        "位置=",
+        "作用/能力=",
+    )
+    for line in lines:
+        if any(marker in line for marker in forbidden):
+            continue
+        cleaned = line.replace("眼下最直接的掣肘有三个：", "")
+        cleaned = cleaned.replace("章末必须落在“", "章末落在“")
+        cleaned = cleaned.strip()
+        if cleaned:
+            cleaned_lines.append(cleaned)
+        else:
+            cleaned_lines.append("")
+    return "\n".join(cleaned_lines)
+
+
+def normalize_dialogue_spacing(text: str) -> str:
+    normalized = re.sub(r"([。！？])([^\n”])", r"\1\n\2", text)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    return normalized
+
+
+def detect_prompt_leakage_markers(text: str) -> list[str]:
+    markers = [
+        "本章核心目标",
+        "这一节必须承担",
+        "冲突焦点",
+        "不要写成",
+        "key_items：",
+        "主角当前限制：",
+        "目标气质：",
+        "状态=",
+        "位置=",
+        "关系=",
+        "作用/能力=",
+    ]
+    return [marker for marker in markers if marker in text]
+
+
+def looks_like_narrative_prose(text: str) -> bool:
+    body = re.sub(r"^#.+$", "", text, flags=re.MULTILINE).strip()
+    if not body:
+        return False
+    paragraphs = [item.strip() for item in body.split("\n\n") if item.strip()]
+    if len(paragraphs) < 4:
+        return False
+    action_tokens = ["说", "看", "冲", "跑", "抬", "回", "咬牙", "手", "脚", "门", "车"]
+    action_hits = sum(1 for token in action_tokens if token in body)
+    return action_hits >= 5
+
+
+def build_scene_blocks_from_keywords(
+    *,
+    protagonist_name: str,
+    scene_hint: str,
+    landing: str,
+    is_first: bool,
+    is_last: bool,
+) -> list[str]:
+    hint = scene_hint
+    if any(keyword in hint for keyword in ["急送", "接单", "高价"]):
+        return [
+            f"就在{protagonist_name}准备接下一单普通夜宵的时候，骑手软件忽然弹出一条急送单。价格高得离谱，配送时限却短得像是故意不让人活。",
+            f"更怪的是，这单没有正常商家备注，取货地址卡在一条老旧巷子里，送达点却在城西一栋快废弃的写字楼。正常骑手看到这种单，多半第一反应就是绕着走。",
+            f"{protagonist_name}也想关掉界面，可他盯着那串配送费看了三秒，脑子里先跳出来的不是风险，而是这个月还差的房贷尾巴。手指只犹豫了一下，单子就被他抢了下来。局面也从这一秒开始，彻底朝着“{landing or '更难回头'}”的方向滑过去。",
+        ]
+    if any(keyword in hint for keyword in ["车祸", "觉醒", "超时"]):
+        return [
+            f"赶往送达点的路上，红灯刚跳黄，侧面一辆面包车就像看不见人一样猛拐过来。{protagonist_name}只来得及骂半句，整个人连车带包一起飞了出去。",
+            f"柏油路蹭得他手臂火辣辣地疼，脑子也嗡的一下发白。可更要命的是，屏幕上的倒计时还在往下跳，包裹还滚在不远处，像是在提醒他这单一旦超时，今晚就白折腾了。",
+            f"就在他咬牙爬起来那一瞬，胸口像是被什么东西猛地顶开。呼吸忽然顺了，腿上的酸胀像被一把扯断，连雨点落下来的速度都像慢了一拍。{protagonist_name}没空理解那是什么，他只知道自己必须先把包捡回来，然后继续往前冲。",
+        ]
+    if any(keyword in hint for keyword in ["送到", "收益", "新能力"]):
+        return [
+            f"包裹重新回到手里后，{protagonist_name}第一次知道什么叫脚底发轻。楼梯一层层往上扑，他却像把平时那些喘不过气的拐角全都踩平了。",
+            f"平时要停两次的长楼道，这回他一口气冲到顶。门开的时候，收货人先是盯了他一眼，像没想到这种时间还真有人能把东西送到，随后才伸手把包裹接过去。",
+            f"到账提示响起来的那一刻，{protagonist_name}心里先是一松，紧接着又猛地一紧。钱是真的，速度也是真的，可越是这样，他越能感觉到自己已经踩进了一个不该碰的局里。",
+        ]
+    if any(keyword in hint for keyword in ["异常", "盯上", "麻烦", "掉包"]):
+        hook = f"{protagonist_name}站在空荡荡的走廊口，后背的冷汗一下就冒出来了。钱是到账了，可真正的麻烦这才露头。有人已经盯上他，而且对方显然不打算给他解释的机会。"
+        if is_last:
+            hook += f"事情也顺着“{landing or '新的危险'}”追到了他脚边。"
+        return [
+            f"电梯门刚合上，{protagonist_name}就察觉到不对。刚才那人接包裹时动作太快，像是在确认什么，又像是在掩饰什么，连一句正常的“辛苦了”都没说。",
+            f"更诡异的是，他低头再看订单页面，那条急送记录竟然开始异常闪烁，像是有人在后台强行改动数据。下一秒，一条陌生短信跳了出来，内容只有一句话：东西没在你手里，最好拿下一单证明。",
+            hook,
+        ]
+    if any(keyword in hint for keyword in ["房贷", "跑单", "现实压力", "外卖"]):
+        return [
+            f"夜里十一点多，{protagonist_name}蹲在商场后门啃冷掉的手抓饼，手机里那条房贷扣款提醒像根鱼刺，一直卡在喉咙口。",
+            f"他白天刚被站长阴阳怪气，说这个月再掉单就别想拿满勤。可他比谁都清楚，自己现在最丢不起的不是面子，是那套还在还贷的房子。一旦现金流断了，父母留下来的最后一点东西都得跟着一起断。",
+            f"所以哪怕腿已经酸得发涨，雨也开始往脖子里灌，他还是得把电动车重新扶正。对别人来说，送外卖只是份活；对他来说，这是眼下唯一还能把日子往明天拖一拖的办法。",
+        ]
+    return []
+
+
 def build_state_update_scaffold(chapter: int, plan_data: dict, final_name: str, final_text: str) -> dict:
     return {
         "meta": {
@@ -1959,8 +2197,8 @@ def load_plan_data(chapter_dir: Path) -> dict | None:
 
 def detect_latest_draft(chapter_dir: Path) -> Path | None:
     candidates = [
-        chapter_dir / "draft-v2-humanized.md",
         chapter_dir / "draft-v1.md",
+        chapter_dir / "draft-v2-humanized.md",
     ]
     for path in candidates:
         if path.exists():
